@@ -1,0 +1,38 @@
+#!/usr/bin/env python
+
+import ConfigParser
+import logging
+import optparse
+
+from nzbfs import NzbFs, fuse
+
+def get_nzbfs(config_file):
+    defaults = {'threads': '4', 'port':  '119', 'ssl': 'false'}
+    config = ConfigParser.SafeConfigParser(defaults)
+    config.read(config_file)
+    nzbfs = NzbFs(config)
+    return nzbfs
+
+def main():
+    parser = optparse.OptionParser(
+        usage='%prog [options] <db root> <mount point>', version='%prog 0.1a')
+    parser.add_option("-c", '--config', default='.nzbfs.cfg',
+                      help='use config file')
+    parser.add_option('-d', '--debug', action='store_true',
+                      help='enable debug mode')
+    options, args = parser.parse_args()
+
+    if options.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    if len(args) < 1:
+        parser.error('Need a mount point')
+
+    nzbfs = get_nzbfs(options.config)
+
+    fuse.FUSE(
+        nzbfs, args[0],
+        debug=options.debug, allow_other=True, nothreads=False,
+    )
+
+if __name__ == '__main__':
+    main()
