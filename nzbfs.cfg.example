@@ -1,0 +1,11 @@
+[nzbfs]
+db_root = /home/username/nzbdb
+post_process = /home/username/nzbfs/nzbfs-postprocess
+
+[/]
+server = example.com
+username = username
+password = password
+ssl = false
+port = 119
+threads = 4
