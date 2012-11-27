@@ -1,0 +1,69 @@
+#! /bin/sh
+
+### BEGIN INIT INFO
+# Provides:          nzbfs
+# Required-Start:    $local_fs $network $remote_fs
+# Required-Stop:     $local_fs $network $remote_fs
+# Should-Start:      $NetworkManager
+# Should-Stop:       $NetworkManager
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: starts instance of nzbfs
+# Description:       starts instance of nzbfs using start-stop-daemon
+### END INIT INFO
+
+############### EDIT ME ##################
+# path to config
+CONFIG=/home/username/nzbfs/nzbfs.cfg
+
+# user
+RUN_AS=YOUR_USERNAME_HERE
+
+# path to nzbfs mount point
+MOUNT=/home/username/mnt/
+
+# path to nzbfs binary
+APP_PATH=/usr/local/bin/nzbfs
+
+# startup args
+APP_OPTS=" -c $CONFIG $MOUNT"
+
+# script name
+NAME=nzbfs
+
+# app name
+DESC=nzbfs
+
+# pid
+PID_FILE=/var/run/nzbfs.pid
+
+############### END EDIT ME ##################
+
+test -x $APP_PATH || exit 0
+
+set -e
+
+case "$1" in
+  start)
+        echo "Starting $DESC"
+        start-stop-daemon -c $RUN_AS --start --background --pidfile $PID_FILE  --make-pidfile --exec $APP_PATH -- $APP_OPTS
+        ;;
+  stop)
+        echo "Stopping $DESC"
+        start-stop-daemon --stop --pidfile $PID_FILE
+        ;;
+
+  restart|force-reload)
+        echo "Restarting $DESC"
+        start-stop-daemon --stop --pidfile $PID_FILE
+        sleep 3
+        start-stop-daemon -c $RUN_AS --start --background --pidfile $PID_FILE  --make-pidfile --exec $APP_PATH -- $APP_OPTS
+        ;;
+  *)
+        N=/etc/init.d/$NAME
+        echo "Usage: $N {start|stop|restart|force-reload}" >&2
+        exit 1
+        ;;
+esac
+
+exit 0
