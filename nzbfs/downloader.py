@@ -19,7 +19,7 @@ class DownloaderPool(threading.Thread):
         self._username = username
         self._password = password
 
-        self._queue = Queue()
+        self._task_queue = Queue()
         self._body_tasks = weakref.WeakValueDictionary() # message_id -> BodyTask
 
         # TODO: Make disk cache configurable
@@ -31,7 +31,7 @@ class DownloaderPool(threading.Thread):
 
     def run(self):
         for i in range(self._num_threads):
-            thread = DownloaderThread(self._queue, i, self, self._server, self._port, self._ssl, self._username, self._password)
+            thread = DownloaderThread(self._task_queue, i, self, self._server, self._port, self._ssl, self._username, self._password)
 	    thread.start()
 	    self._threads.append(thread)
 
@@ -48,7 +48,7 @@ class DownloaderPool(threading.Thread):
 			with self._lock:
 			    self._segment_cache.set(part.message_id, line_handler.get_data())
 		    task.callbacks.append(_update_cache_cb)
-                    self._queue.put(task)
+                    self._task_queue.put(task)
                     self._body_tasks[part.message_id] = task
             else:
                 return cached_result
@@ -57,7 +57,7 @@ class DownloaderPool(threading.Thread):
 
     def queue_stat(self, file):
         task = StatTask(file)
-        self._queue.put(task)
+        self._task_queue.put(task)
         return task
 
     def status(self):
@@ -72,7 +72,7 @@ class DownloaderPool(threading.Thread):
 class DownloaderThread(threading.Thread):
     def __init__(self, queue, number, pool, server, port, ssl, username, password):
         super(DownloaderThread, self).__init__()
-        self._queue = queue
+        self._task_queue = queue
 	self._number = number
 	self._pool = pool
         self._server = server
@@ -166,7 +166,7 @@ class DownloaderThread(threading.Thread):
         while True:
 	    if self.cur_task == None:
 		logging.info("Thread: %d waiting for a new task", self._number)
-		cur_task = self._queue.get()
+		cur_task = self._task_queue.get()
 		with self._lock:
 		    self.cur_task = cur_task
 		logging.info("Thread: %d got %s", self._number, self.cur_task)
