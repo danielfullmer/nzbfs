@@ -55,6 +55,7 @@ class MemCache(object):
             self._key_deque = deque()
             self._data_dict = dict()
 
+
 class DiskCache(object):
     def __init__(self, root):
         self._root = root
@@ -69,10 +70,11 @@ class DiskCache(object):
     def get(self, key):
         try:
             f = open(os.path.join(self._root, key), 'r')
-	    logging.info("Using a cache file!")
+            logging.info("Using a cache file!")
             return f.read()
         except IOError:
             return None
+
 
 class CacheChain(object):
     def __init__(self, caches):
@@ -95,6 +97,7 @@ class CacheChain(object):
                 return data
         return None
 
+
 class LearningStringMatcher(object):
     def __init__(self, patterns=None):
         self.patterns = patterns or []
@@ -112,11 +115,13 @@ class LearningStringMatcher(object):
         pattern = re.sub(r'\d+\s*of\s*\d+', r'\d+\s*of\s*\d+', pattern)
         self.patterns.append(re.compile(pattern))
 
+
 def is_nzf(path):
     if os.path.isfile(path):
         return 'user.nzbfs.size' in xattr.listxattr(path)
     else:
         return False
+
 
 def get_nzf_attr(path, attr):
     try:
@@ -124,6 +129,7 @@ def get_nzf_attr(path, attr):
         return int(ret)
     except IOError:
         return None
+
 
 def set_nzf_attr(path, attr, value):
     xattr.setxattr(path, 'user.nzbfs.' + attr, str(value))

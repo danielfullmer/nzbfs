@@ -20,11 +20,11 @@ class DownloaderPool(threading.Thread):
         self._username = username
         self._password = password
 
+        # A queue of available tasks to process
         self._task_queue = Queue()
-        self._body_tasks = weakref.WeakValueDictionary() # message_id -> BodyTask
+        # message_id -> BodyTask
+        self._body_tasks = weakref.WeakValueDictionary()
 
-        # TODO: Make disk cache configurable
-        #self._segment_cache = CacheChain((MemCache(5 * 1024 * 1024), DiskCache('/mnt/cache')))
         self._segment_cache = MemCache(20 * 1024 * 1024)
         self._lock = threading.Lock()
 

@@ -242,26 +242,26 @@ class YencFsHandle(Handle):
         if offset is None:
             offset = self._cur
 
-	if offset >= self._file.file_size:
-	    logging.error("Reading past file end.")
-	    return '\0' * size # TODO: Should I be doing this?
+        if offset >= self._file.file_size:
+            logging.error("Reading past file end.")
+            return '\0' * size  # TODO: Should I be doing this?
 
-	# Start fetching ones we probably need.
-	self.prefetch(size, offset)
+        # Start fetching ones we probably need.
+        self.prefetch(size, offset)
 
         data = ''
         tries = 5
         size_remaining = size
         while size_remaining > 0 and tries > 0:
             if self._file.seen and offset >= self._file.file_size:
-		logging.error("Reading past file end.")
+                logging.error("Reading past file end.")
                 break
             #part = self._file._guess_part(offset)
             part_i = self._file._guess_part(offset)
-	    if part_i >= len(self._file.parts):
-		part_i = len(self._file.parts) - 1
-	    part = self._file.parts[part_i]
-	    update_queue, line_handler = self._fetch(part)
+            if part_i >= len(self._file.parts):
+                part_i = len(self._file.parts) - 1
+            part = self._file.parts[part_i]
+            update_queue, line_handler = self._fetch(part)
 
             while True:
                 part_finished, part_size, part_error = update_queue.get()
@@ -279,12 +279,13 @@ class YencFsHandle(Handle):
             assert part.begin is not None
             if part.begin <= offset < part.begin + part.bytes:
                 part_offset = offset - part.begin
-                newdata = newdata[part_offset:part_offset+size_remaining]
+                newdata = newdata[part_offset:part_offset + size_remaining]
                 offset += len(newdata)
                 size_remaining -= len(newdata)
                 data += newdata
             else:
-                logging.info('Missed part. Offset: %d part: %s' % (offset, part))
+                logging.info(
+                    'Missed part. Offset: %d part: %s' % (offset, part))
                 tries -= 1
 
         self._cur = offset
@@ -294,6 +295,7 @@ class YencFsHandle(Handle):
         task = self._downloader.queue_stat(self._file)
         task.wait()
         return task.complete
+
 
 class YencPart(object):
     __slots__ = ('number', 'message_id', 'begin', 'bytes', 'seen')
@@ -306,20 +308,24 @@ class YencPart(object):
         self.seen = False
 
     def __getstate__(self):
-        return (self.number, self.message_id, self.begin, self.bytes, self.seen)
+        return (self.number, self.message_id, self.begin, self.bytes,
+                self.seen)
 
     def __setstate__(self, state):
         self.number, self.message_id, self.begin, self.bytes, self.seen = state
 
     def __repr__(self):
-        return "<YencPart: number=%s, message_id=%s, begin=%s, bytes=%s, seen=%s>" % (
-                self.number, self.message_id, self.begin, self.bytes, self.seen)
+        return (
+            '<YencPart: number=%s, message_id=%s, begin=%s, bytes=%s, seen=%s>'
+            % (self.number, self.message_id, self.begin, self.bytes, self.seen)
+        )
 
 
 def get_opener(files_dict, downloader):
     def opener(fname, mode):
         return files_dict[fname].open('r', downloader)
     return opener
+
 
 # Sort the various RAR filename formats properly :\
 def rar_sort(a, b):
@@ -337,6 +343,7 @@ def rar_sort(a, b):
     else:
         return cmp(a, b)
 
+
 class RarFsFile(object):
     def __init__(self, filename, file_size, mtime, first_file_offset,
                  default_file_offset, first_add_size, default_add_size,
@@ -349,9 +356,9 @@ class RarFsFile(object):
         self.default_file_offset = default_file_offset
         self.first_add_size = first_add_size
         self.default_add_size = default_add_size
-	self.first_volume_num = first_volume_num
+        self.first_volume_num = first_volume_num
         self.sub_files = sub_files_dict.items()
-        self.sub_files.sort(lambda a,b: rar_sort(a[0], b[0]))
+        self.sub_files.sort(lambda a, b: rar_sort(a[0], b[0]))
         self.sub_files = [file for filename, file in self.sub_files]
         self.dirty = True
 
@@ -385,43 +392,55 @@ class RarFsFile(object):
     def open(self, mode, downloader):
         return RarFsHandle(self, downloader)
 
+
 class RarFsHandle(Handle):
     def read(self, size, offset=None):
         if offset is None:
             offset = self._cur
 
         data = ''
-	i = self._file.first_volume_num
-	if offset >= self._file.first_add_size:
-	    i += 1 + (offset - self._file.first_add_size) // self._file.default_add_size
+        i = self._file.first_volume_num
+        if offset >= self._file.first_add_size:
+            i += (1 + (offset - self._file.first_add_size) //
+                  self._file.default_add_size)
 
-	assert i < len(self._file.sub_files)
+        assert i < len(self._file.sub_files)
         while size > 0 and i < len(self._file.sub_files):
             if offset >= self._file.file_size:
                 break
 
-	    if offset < self._file.first_add_size:
-		file_offset = offset
-		file_length = min(self._file.first_add_size - file_offset, size)
-		outer_file_offset = file_offset + self._file.first_file_offset
+            if offset < self._file.first_add_size:
+                file_offset = offset
+                file_length = min(self._file.first_add_size - file_offset,
+                                  size)
+                outer_file_offset = file_offset + self._file.first_file_offset
 
-	    if offset >= self._file.first_add_size:
-		file_offset = offset - self._file.first_add_size
-		file_offset -= (i - self._file.first_volume_num - 1) * self._file.default_add_size
-		file_length = min(self._file.default_add_size - file_offset, size)
-		outer_file_offset = file_offset + self._file.default_file_offset
+            if offset >= self._file.first_add_size:
+                file_offset = offset - self._file.first_add_size
+                file_offset -= ((i - self._file.first_volume_num - 1) *
+                                self._file.default_add_size)
+                file_length = min(self._file.default_add_size - file_offset,
+                                  size)
+                outer_file_offset = (file_offset +
+                                     self._file.default_file_offset)
 
-	    if outer_file_offset < 0 or outer_file_offset >= self._file.sub_files[i].file_size:
-		logging.error("offset: %d", offset)
-		logging.error("file_offset: %d", file_offset)
-		logging.error("outer_file_offset: %d", outer_file_offset)
-		logging.error("file_length: %d", file_length)
-		logging.error("i: %d", i)
-		logging.error("first_volume_num: %d", self._file.first_volume_num)
-		logging.error("first_add_size: %d", self._file.first_add_size)
-		logging.error("default_add_size: %d", self._file.default_add_size)
-		logging.error("first_file_offset: %d", self._file.first_file_offset)
-		logging.error("default_file_offset: %d", self._file.default_file_offset)
+            if (outer_file_offset < 0 or
+                    outer_file_offset >= self._file.sub_files[i].file_size):
+
+                logging.error("offset: %d", offset)
+                logging.error("file_offset: %d", file_offset)
+                logging.error("outer_file_offset: %d", outer_file_offset)
+                logging.error("file_length: %d", file_length)
+                logging.error("i: %d", i)
+                logging.error("first_volume_num: %d",
+                              self._file.first_volume_num)
+                logging.error("first_add_size: %d", self._file.first_add_size)
+                logging.error("default_add_size: %d",
+                              self._file.default_add_size)
+                logging.error("first_file_offset: %d",
+                              self._file.first_file_offset)
+                logging.error("default_file_offset: %d",
+                              self._file.default_file_offset)
 
             handle = self._file.sub_files[i].open('r', self._downloader)
             newdata = handle.read(file_length, outer_file_offset)
@@ -434,8 +453,8 @@ class RarFsHandle(Handle):
         return data
 
     def check(self):
-        stat_tasks = [ self._downloader.queue_stat(sub_file)
-                       for sub_file in self._file.sub_files ]
+        stat_tasks = [self._downloader.queue_stat(sub_file)
+                      for sub_file in self._file.sub_files]
         for task in stat_tasks:
             task.wait()
             if not task.complete:
@@ -476,4 +495,5 @@ def parse_nzb(nzb, downloader):
             elem.clear()
 
 
-reverse_enumerate = lambda l: itertools.izip(xrange(len(l)-1, -1, -1), reversed(l))
+def reverse_enumerate(l):
+    return itertools.izip(xrange(len(l) - 1, -1, -1), reversed(l))

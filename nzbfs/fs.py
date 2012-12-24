@@ -40,7 +40,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                 num_threads = int(config.get(section, 'threads'))
                 server = config.get(section, 'server')
                 port = config.getint(section, 'port')
-		ssl = config.getboolean(section, 'ssl')
+                ssl = config.getboolean(section, 'ssl')
                 username = config.get(section, 'username')
                 password = config.get(section, 'password')
                 self._downloaders[section] = DownloaderPool(
@@ -76,8 +76,10 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
     def _db_root_property(attr):
         def _get_attr(self):
             return get_nzf_attr(self.db_root, attr)
+
         def _set_attr(self, value):
             return set_nzf_attr(self.db_root, attr, value)
+
         return property(_get_attr, _set_attr)
 
     total_files = _db_root_property('total_files')
@@ -121,7 +123,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
     def flush(self, path, fh):
         return self._open_handles[fh].flush()
-    
+
     def fsync(self, path, datasync, fh):
         return self._open_handles[fh].fsync()
 
@@ -233,8 +235,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         try:
             if xattr.getxattr(self.db_root + path, 'user.nzbfs.type') == 'nzb':
                 with self._attr_lock:
+                    file_size = get_nzf_attr(self.db_root + path, 'size')
                     self.total_files -= 1
-                    self.total_size -= get_nzf_attr(self.db_root + path, 'size')
+                    self.total_size -= file_size
         finally:
             return os.unlink(self.db_root + path)
 
@@ -258,11 +261,11 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         sum_files = sum_size = 0
         matcher = LearningStringMatcher([SUBJECT_RE])
 
-	if not os.path.isdir("%s/%s" % (self.db_root, basepath)):
-	    os.mkdir("%s/%s" % (self.db_root, basepath))
+        if not os.path.isdir("%s/%s" % (self.db_root, basepath)):
+            os.mkdir("%s/%s" % (self.db_root, basepath))
 
         for file in parse_nzb(fh, downloader):
-	    handle = file.open('r', downloader)
+            handle = file.open('r', downloader)
 
             filename = matcher.match(file.subject)
             if filename:
@@ -275,7 +278,8 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                 matcher.should_match(file.subject, file.filename)
             logging.info(filename)
 
-            # TODO: Get the real filesize if it's not a rar, since we try to extract those.
+            # TODO: Get the real filesize if it's not a rar, since we try to
+            # extract those.
             #if not RAR_RE.search(file.filename):
             #    handle.read(1)
 
@@ -295,6 +299,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             os.system('"%s" "%s" &' % (self.post_process_script, path))
 
     _commands = ['extract', 'extract_rars', 'extract_splits', 'check', 'info']
+
     def command(self, path, value):
         if value in NzbFs._commands:
             return getattr(self, value)(path)
@@ -307,9 +312,11 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
     def extract_rars(self, path):
         downloader = self._get_downloader(path)
-	max_files = 1
+        max_files = 1
 
-        rars = [ filename for filename in os.listdir(self.db_root + path) if RAR_RE.search(filename) ]
+        rars = [filename
+                for filename in os.listdir(self.db_root + path)
+                if RAR_RE.search(filename)]
 
         rar_sets = {}
         for rar in rars:
@@ -329,43 +336,43 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             }
 
             opener = get_opener(files_dict, downloader)
-	    
-	    x = {
+
+            x = {
                 'default_file_offset': 0,
                 'largest_add_size': 0,
                 'files_seen': 0
             }
 
-	    def info_callback(item):
-		if item.type == rarfile.RAR_BLOCK_FILE:
-		    if item.add_size > x['largest_add_size']:
-			x['largest_add_size'] = item.add_size
+            def info_callback(item):
+                if item.type == rarfile.RAR_BLOCK_FILE:
+                    if item.add_size > x['largest_add_size']:
+                        x['largest_add_size'] = item.add_size
 
-		    if (item.flags & rarfile.RAR_FILE_SPLIT_BEFORE) == 0:
-			if x['default_file_offset'] == 0:
-			    x['default_file_offset'] = item.file_offset
+                    if (item.flags & rarfile.RAR_FILE_SPLIT_BEFORE) == 0:
+                        if x['default_file_offset'] == 0:
+                            x['default_file_offset'] = item.file_offset
 
-			logging.info(item.filename)
-			x['files_seen'] += 1
-			if x['files_seen'] >= max_files:
-			    logging.info("Done parsing")
-			    return True # Stop parsing
+                        logging.info(item.filename)
+                        x['files_seen'] += 1
+                        if x['files_seen'] >= max_files:
+                            logging.info("Done parsing")
+                            return True  # Stop parsing
 
             tmp_rf = rarfile.RarFile(first_rar_filename,
                                      info_callback=info_callback,
                                      opener=opener)
-	    for ri in tmp_rf.infolist():
-		date_time = calendar.timegm(ri.date_time)
+            for ri in tmp_rf.infolist():
+                date_time = calendar.timegm(ri.date_time)
 
-		if ri.compress_type == 0x30:
+                if ri.compress_type == 0x30:
                     rf = RarFsFile(ri.filename, ri.file_size, date_time,
                                    ri.file_offset, x['default_file_offset'],
                                    ri.add_size, x['largest_add_size'],
                                    ri.volume, files_dict)
-		else:
+                else:
                     logging.info("Extract from compressed rar file %s" %
                                  first_rar_filename)
-		rf.save('%s/%s/%s' % (self.db_root, path, ri.filename))
+                rf.save('%s/%s/%s' % (self.db_root, path, ri.filename))
 
             for rar_filename in rar_sets[rar_set]:
                 os.unlink('%s/%s/%s' % (self.db_root, path, rar_filename))

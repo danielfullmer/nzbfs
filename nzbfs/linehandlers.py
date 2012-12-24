@@ -3,6 +3,10 @@ import re
 
 import yenc
 
+# Example: =ybegin part=1 line=128 size=123 name=-=DUMMY=- abc.par
+YSPLIT_RE = re.compile(r'([a-zA-Z0-9]+)=')
+
+
 class YencLineHandler(object):
     STATE_WAITING = 0
     STATE_DECODING = 1
@@ -40,10 +44,10 @@ class YencLineHandler(object):
         fields = ySplit(line)
         with self.file._lock:
             if line.lower().startswith('=ybegin'):
-		if 'part' in fields:
-		    self.part.number = int(fields['part'])
-		else:
-		    self.part.number = 1
+                if 'part' in fields:
+                    self.part.number = int(fields['part'])
+                else:
+                    self.part.number = 1
                 self.file.file_size = int(fields['size'])
                 self.file.filename = fields['name']
                 if not self.file.seen:
@@ -60,9 +64,8 @@ class YencLineHandler(object):
             elif line.lower().startswith('=yend'):
                 self._state = YencLineHandler.STATE_WAITING
 
-# Example: =ybegin part=1 line=128 size=123 name=-=DUMMY=- abc.par
-YSPLIT_RE = re.compile(r'([a-zA-Z0-9]+)=')
-def ySplit(line, splits = None):
+
+def ySplit(line, splits=None):
     fields = {}
 
     if 'name=' in line:
@@ -77,7 +80,7 @@ def ySplit(line, splits = None):
         return fields
 
     for i in range(0, len(parts), 2):
-        key, value = parts[i], parts[i+1]
+        key, value = parts[i], parts[i + 1]
         fields[key] = value.strip()
 
     return fields
