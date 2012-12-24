@@ -8,6 +8,7 @@ import weakref
 
 from nzbfs.utils import MemCache
 
+
 class DownloaderPool(threading.Thread):
     def __init__(self, num_threads, server, port, ssl, username, password):
         super(DownloaderPool, self).__init__()
@@ -15,7 +16,7 @@ class DownloaderPool(threading.Thread):
         self._num_threads = num_threads
         self._server = server
         self._port = port
-	self._ssl = ssl
+        self._ssl = ssl
         self._username = username
         self._password = password
 
@@ -27,62 +28,78 @@ class DownloaderPool(threading.Thread):
         self._segment_cache = MemCache(20 * 1024 * 1024)
         self._lock = threading.Lock()
 
-	self._threads = []
+        self._threads = []
 
     def run(self):
         for i in range(self._num_threads):
-            thread = DownloaderThread(self._task_queue, i, self, self._server, self._port, self._ssl, self._username, self._password)
-	    thread.start()
-	    self._threads.append(thread)
+            thread = DownloaderThread(
+                self._task_queue, i, self, self._server, self._port, self._ssl,
+                self._username, self._password)
+            thread.start()
+            self._threads.append(thread)
 
-    def queue(self, part, line_handler_factory):
+    def queue(self, part, line_handler):
+        """ Queue a task to fetch a particular part.
+
+        Returns a queue where updates about ecoded data will be fed. Each tuple
+        returned from the queue is of the form: (finished, size, error)
+
+        finished: True/False, if the part is finished downloading/decoding.
+        data: The currently decoded data.
+        error: Optional exception.
+        """
         with self._lock:
-            cached_result = self._segment_cache.get(part.message_id)
-            if (part.begin is None or part.bytes is None) or cached_result is None:
-                if part.message_id in self._body_tasks:
-                    task = self._body_tasks[part.message_id]
-                else:
-                    line_handler = line_handler_factory()
-                    task = BodyTask(line_handler)
-		    def _update_cache_cb():
-			with self._lock:
-			    self._segment_cache.set(part.message_id, line_handler.get_data())
-		    task.callbacks.append(_update_cache_cb)
-                    self._task_queue.put(task)
-                    self._body_tasks[part.message_id] = task
+            update_queue = Queue()
+            cached_data = self._segment_cache.get(part.message_id)
+
+            if cached_data:
+                line_handler.set_data(cached_data)
+                update_queue.put((True, len(cached_data), None))
+                return update_queue
+
+            if part.message_id in self._body_tasks:
+                task = self._body_tasks[part.message_id]
+                update_queue.put((False, line_handler.get_size(), None))
             else:
-                return cached_result
+                task = BodyTask(line_handler)
 
-        return task
+                def _update_cache_cb():
+                    with self._lock:
+                        self._segment_cache.set(
+                            part.message_id, line_handler.get_data())
+                task.callbacks.append(_update_cache_cb)
 
-    def queue_stat(self, file):
-        task = StatTask(file)
-        self._task_queue.put(task)
-        return task
+                self._task_queue.put(task)
+                self._body_tasks[part.message_id] = task
+
+            task.update_queues.append(update_queue)
+            return update_queue
 
     def status(self):
-	s = []
-	for thread in self._threads:
-	    if thread.cur_task is None:
-		s.append('None')
-	    else:
-		s.append(thread.status())
-	logging.info("Currently processing: " + " ".join(s))
+        s = []
+        for thread in self._threads:
+            if thread.cur_task is None:
+                s.append('None')
+            else:
+                s.append(thread.status())
+        logging.info("Currently processing: " + " ".join(s))
+
 
 class DownloaderThread(threading.Thread):
-    def __init__(self, queue, number, pool, server, port, ssl, username, password):
+    def __init__(self, queue, number, pool, server, port, ssl, username,
+                 password):
         super(DownloaderThread, self).__init__()
         self._task_queue = queue
-	self._number = number
-	self._pool = pool
+        self._number = number
+        self._pool = pool
         self._server = server
         self._port = port
-	self._ssl = ssl
+        self._ssl = ssl
         self._username = username
         self._password = password
 
-	self.cur_task = None
-	self._lock = threading.Lock()
+        self.cur_task = None
+        self._lock = threading.Lock()
 
         self.reset()
 
@@ -97,12 +114,12 @@ class DownloaderThread(threading.Thread):
     def connect(self):
         self.reset()
         self._sock = socket.create_connection((self._server, self._port))
-	if self._ssl:
-	    self._sock = ssl.wrap_socket(self._sock)
+        if self._ssl:
+            self._sock = ssl.wrap_socket(self._sock)
 
         # Sometimes the NNTP server will hang. We'll just timeout and restart.
         # TODO: Do something smarter here?
-	self._sock.settimeout(10.0)
+        self._sock.settimeout(10.0)
 
         code, line = self.get_resp()
         if code in ('200', '201'):
@@ -153,7 +170,7 @@ class DownloaderThread(threading.Thread):
         self.send_line('body <%s>\r\n' % message_id)
         code, line = self.get_resp()
         if code != '222':
-	    logging.info('Unexpected response to "body": %s' % line)
+            logging.info('Unexpected response to "body": %s' % line)
 
     def send_stat(self, message_id):
         self.send_line('stat <%s>\r\n' % message_id)
@@ -164,100 +181,49 @@ class DownloaderThread(threading.Thread):
     def run(self):
         self.connect()
         while True:
-	    if self.cur_task == None:
-		logging.info("Thread: %d waiting for a new task", self._number)
-		cur_task = self._task_queue.get()
-		with self._lock:
-		    self.cur_task = cur_task
-		logging.info("Thread: %d got %s", self._number, self.cur_task)
+            if self.cur_task is None:
+                logging.info("Thread: %d waiting for a new task", self._number)
+                cur_task = self._task_queue.get()
+                with self._lock:
+                    self.cur_task = cur_task
+                logging.info("Thread: %d got %s", self._number, self.cur_task)
 
-	    self._pool.status()
+            self._pool.status()
 
             try:
                 self.cur_task.execute(self)
-            except (socket.error, ssl.SSLError, nntplib.NNTPTemporaryError, nntplib.NNTPPermanentError), e:
+            except (socket.error, ssl.SSLError, nntplib.NNTPTemporaryError,
+                    nntplib.NNTPPermanentError), e:
                 logging.error(e)
-		logging.info("Reconnecting")
+                logging.info("Reconnecting")
                 self.connect()
-	    except Exception, e:
-		logging.error(e)
-	    else:
-		with self._lock:
-		    self.cur_task = None
+            except Exception, e:
+                logging.error(e)
+            else:
+                with self._lock:
+                    self.cur_task = None
 
     def status(self):
-	with self._lock:
-	    if self.cur_task is not None:
-		return self.cur_task.line_handler.part.message_id
-	    else:
-		return "None"
+        with self._lock:
+            if self.cur_task is not None:
+                return self.cur_task.line_handler.part.message_id
+            else:
+                return "None"
 
-class DownloaderTask(object):
-    def __init__(self):
-        self.cv = threading.Condition()
-        self.callbacks = []
-        self.done = False
-        self.error = None
 
-    def reset(self):
-        self.done = False
-        self.error = None
-
-    def execute(self, thread):
-        raise NotImplementedError()
-
-    def notify(self):
-        self.cv.acquire()
-        self.cv.notifyAll()
-        self.cv.release()
-
-    def wait(self):
-        self.cv.acquire()
-        self.cv.wait()
-        self.cv.release()
-
-    def finished(self):
-        self.done = True
-        for callback in self.callbacks:
-            callback()
-        self.notify()
-
-    def send_error(self, error):
-        self.error = error
-        self.finished()
-
-class StatTask(DownloaderTask):
-    def __init__(self, file):
-        super(StatTask, self).__init__()
-        self._file = file
-        self.complete = True
-
-    def reset(self):
-        super(StatTask, self).reset()
-        self.complete = True
-
-    def execute(self, thread):
-        thread.send_group(self._file.groups[0])
-        for part in self._file.parts:
-            thread.send_line('stat <%s>\r\n' % part.message_id)
-        for part in self._file.parts:
-            try:
-                code, line = thread.get_resp()
-                if code != '223':
-                    logging.info('Unexpected response to "stat": %s' % line)
-            except nntplib.NNTPTemporaryError:
-                self.complete = False
-                self.finished()
-        self.finished()
-
-class BodyTask(DownloaderTask):
+class BodyTask(object):
     def __init__(self, line_handler):
-        super(BodyTask, self).__init__()
+        self.callbacks = []
         self.line_handler = line_handler
+        self.update_queues = []
 
     def reset(self):
-        super(BodyTask, self).reset()
         self.line_handler.reset()
+
+    def notify(self, finished, error):
+        size = self.line_handler.get_size()
+        for queue in self.update_queues:
+            queue.put((finished, size, error))
 
     def execute(self, thread):
         thread.send_group(self.line_handler.file.groups[0])
@@ -265,7 +231,7 @@ class BodyTask(DownloaderTask):
         try:
             thread.send_body(self.line_handler.part.message_id)
         except nntplib.NNTPTemporaryError, e:
-            self.send_error(e)
+            self.notify(True, '', e)
             return
         while True:
             line = thread.get_line()
@@ -275,17 +241,12 @@ class BodyTask(DownloaderTask):
             if line[:2] == '..':
                 line = line[1:]
             self.line_handler.feed(line)
+
+            # Notify on packet end
             if len(thread.recv_lines) == 0:
-                self.notify()
+                self.notify(False, None)
 
-class MockDownloader(object):
-    def __init__(self, article_dir):
-        self.article_dir = article_dir
-
-    def queue(self, part, line_handler_factory):
-        fh = open('%s/%s' % (self.article_dir, part))
-        line_handler = line_handler_factory()
-        task = DownloaderTask(line_handler)
-        for line in fh:
-            line_handler.feed(line)
-        task.finished()
+    def finished(self):
+        for callback in self.callbacks:
+            callback()
+        self.notify(True, None)

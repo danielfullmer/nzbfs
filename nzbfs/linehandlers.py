@@ -10,17 +10,30 @@ class YencLineHandler(object):
     def __init__(self, file, part):
         self.file = file
         self.part = part
+        self._cached_data = None
         self.reset()
 
     def reset(self):
         self._state = YencLineHandler.STATE_WAITING
         self._decoder = yenc.Decoder()
 
+    def set_data(self, data):
+        self._cached_data = data
+
+    def get_data(self):
+        if self._cached_data is None:
+            self._cached_data = self._decoder.getDecoded()
+        return self._cached_data
+
+    def get_size(self):
+        return self._decoder.getSize()
+
     def feed(self, line):
         if line.startswith('=y'):
             logging.debug(line)
             self.handle_y(line)
         elif self._state == YencLineHandler.STATE_DECODING and line:
+            self._cached_data = None  # Reset data cache
             self._decoder.feed(line)
 
     def handle_y(self, line):
@@ -46,12 +59,6 @@ class YencLineHandler(object):
                 self._state = YencLineHandler.STATE_DECODING
             elif line.lower().startswith('=yend'):
                 self._state = YencLineHandler.STATE_WAITING
-
-    def get_data(self):
-        return self._decoder.getDecoded()
-
-    def get_size(self):
-        return self._decoder.getSize()
 
 # Example: =ybegin part=1 line=128 size=123 name=-=DUMMY=- abc.par
 YSPLIT_RE = re.compile(r'([a-zA-Z0-9]+)=')

@@ -202,8 +202,9 @@ class YencFsHandle(Handle):
         super(YencFsHandle, self).__init__(*args, **kwargs)
 
     def _fetch(self, part):
-        return self._downloader.queue(
-            part, lambda: YencLineHandler(self._file, part))
+        line_handler = YencLineHandler(self._file, part)
+        update_queue = self._downloader.queue(part, line_handler)
+        return update_queue, line_handler
 
     def prefetch(self, size, offset=None):
         if offset is None:
@@ -250,7 +251,8 @@ class YencFsHandle(Handle):
 
         data = ''
         tries = 5
-        while size > 0 and tries > 0:
+        size_remaining = size
+        while size_remaining > 0 and tries > 0:
             if self._file.seen and offset >= self._file.file_size:
 		logging.error("Reading past file end.")
                 break
@@ -259,30 +261,27 @@ class YencFsHandle(Handle):
 	    if part_i >= len(self._file.parts):
 		part_i = len(self._file.parts) - 1
 	    part = self._file.parts[part_i]
-	    ret = self._fetch(part)
-            if isinstance(ret, str):
-                newdata = ret
-            else:
-                task = ret
-                i = 0
-                while not (part.begin is not None \
-                        and task.line_handler.get_size() > offset - part.begin + size \
-                        or task.done):
-                    if i > 1000:
-                        break
-                    task.wait()
-                    i += 1
-                if task.error is not None:
-                    logging.exception(task.error)
+	    update_queue, line_handler = self._fetch(part)
+
+            while True:
+                part_finished, part_size, part_error = update_queue.get()
+                if part_error is not None:
+                    logging.exception(part_error)
                     raise fuse.FuseOSError(errno.EIO)
-                newdata = task.line_handler.get_data()
+                elif part_finished:
+                    break
+                elif (part.begin is not None
+                      and part_size > offset - part.begin + size_remaining):
+                    break
+
+            newdata = line_handler.get_data()
 
             assert part.begin is not None
             if part.begin <= offset < part.begin + part.bytes:
                 part_offset = offset - part.begin
-                newdata = newdata[part_offset:part_offset+size]
+                newdata = newdata[part_offset:part_offset+size_remaining]
                 offset += len(newdata)
-                size -= len(newdata)
+                size_remaining -= len(newdata)
                 data += newdata
             else:
                 logging.info('Missed part. Offset: %d part: %s' % (offset, part))
