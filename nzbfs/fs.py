@@ -370,8 +370,8 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                                    ri.add_size, x['largest_add_size'],
                                    ri.volume, files_dict)
                 else:
-                    logging.info("Extract from compressed rar file %s" %
-                                 first_rar_filename)
+                    raise Exception('Extract from compressed rar file %s' %
+                                    first_rar_filename)
                 rf.save('%s/%s/%s' % (self.db_root, path, ri.filename))
 
             for rar_filename in rar_sets[rar_set]:
