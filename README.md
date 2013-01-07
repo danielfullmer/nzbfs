@@ -10,6 +10,9 @@ The files given by the NZB are listed inside the new folder.
 Additionally, NzbFS can read files inside uncompressed rars transparently.
 With NzbFS you should be able to play video/music, mount ISOs, and generally do anything you could with a local file, except data is streamed as needed.
 
+NzbFS should be considered *alpha* quality.
+Things may very possibly go wrong, and there is no guarantee that the database serialization format will not change significantly.
+
 Post Processing
 ---------------
 After an NZB has been added to NzbFS, a user-provided post-processing script is called with the path of the newly created NZB directory.
