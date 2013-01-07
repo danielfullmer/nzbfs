@@ -5,5 +5,5 @@ setup(
     version='0.2.0',
     packages=['nzbfs'],
     scripts=['scripts/nzbfs'],
-    requires=['xattr', 'yenc'],
+    requires=['xattr', 'yenc', 'google.protobuf'],
 )
