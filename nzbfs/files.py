@@ -1,4 +1,3 @@
-import cPickle as pickle
 import errno
 import itertools
 import logging
@@ -8,20 +7,12 @@ import threading
 import xml.etree.cElementTree as ElementTree
 
 from nzbfs import fuse
+from nzbfs import nzbfs_pb2
 from nzbfs.linehandlers import YencLineHandler
 from nzbfs.utils import set_nzf_attr
 
 
 MAX_READAHEAD = 2 * 1024 * 1024
-
-
-class File(object):
-    def __init__(self):
-        self.__init_temp()
-
-    def __init_temp(self):
-        self._lock = threading.RLock()
-        self.dirty = False
 
 
 class Handle(object):
@@ -111,9 +102,9 @@ class RegularFileHandle(Handle):
         return True
 
 
-class YencFsFile(File):
-    def __init__(self, subject, poster, date_time, groups, parts):
-        self.__init_temp()
+class YencFsFile(object):
+    def __init__(self, subject=None, poster=None, date_time=0, groups=[],
+                 parts=[]):
         self.subject = subject
         self.filename = None
         self.poster = poster
@@ -122,23 +113,11 @@ class YencFsFile(File):
         self.parts = parts
         self.file_size = sum(part.bytes for part in parts)
         self.seen = False
+
         self.dirty = True
-
-    def __init_temp(self):
         self._lock = threading.RLock()
-        self.dirty = False
-
         self._last_read_offset = 0  # Where the last read left off.
         self._readahead = 1
-
-    def __getstate__(self):
-        return (self.subject, self.poster, self.mtime,
-                self.groups, self.parts, self.file_size, self.seen)
-
-    def __setstate__(self, state):
-        (self.subject, self.poster, self.mtime,
-         self.groups, self.parts, self.file_size, self.seen) = state
-        self.__init_temp()
 
     def add_part(self, part):
         with self._lock:
@@ -184,10 +163,36 @@ class YencFsFile(File):
             slice_i = (offset - lower_offset) // part_size
             return lower_i + slice_i
 
+    def load(self, pb):
+        self.filename = pb.filename
+        self.file_size = pb.file_size
+        self.mtime = pb.mtime
+        self.seen = pb.seen
+        self.subject = pb.subject
+        self.poster = pb.poster
+        self.groups = pb.groups
+        self.parts = pb.parts
+        self.dirty = False
+
+    def dump(self):
+        pb = nzbfs_pb2.File()
+        pb.type = nzbfs_pb2.File.YENC
+        pb.filename = self.filename
+        pb.file_size = self.file_size
+        pb.mtime = self.mtime
+        pb.seen = self.seen
+        pb.subject = self.subject
+        pb.poster = self.poster
+        for group in self.groups:
+            pb.groups.append(group)
+        pb.parts.extend(self.parts)
+        return pb
+
     def save(self, path):
         with self._lock:
             if self.dirty:
-                pickle.dump(self, open(path, 'w'), pickle.HIGHEST_PROTOCOL)
+                with open(path, 'w') as fh:
+                    fh.write(self.dump().SerializeToString())
                 set_nzf_attr(path, 'type', 'nzb')
                 set_nzf_attr(path, 'size', self.file_size)
                 set_nzf_attr(path, 'mtime', self.mtime)
@@ -297,30 +302,6 @@ class YencFsHandle(Handle):
         return task.complete
 
 
-class YencPart(object):
-    __slots__ = ('number', 'message_id', 'begin', 'bytes', 'seen')
-
-    def __init__(self, number, message_id, bytes):
-        self.number = number
-        self.message_id = message_id
-        self.begin = None
-        self.bytes = bytes
-        self.seen = False
-
-    def __getstate__(self):
-        return (self.number, self.message_id, self.begin, self.bytes,
-                self.seen)
-
-    def __setstate__(self, state):
-        self.number, self.message_id, self.begin, self.bytes, self.seen = state
-
-    def __repr__(self):
-        return (
-            '<YencPart: number=%s, message_id=%s, begin=%s, bytes=%s, seen=%s>'
-            % (self.number, self.message_id, self.begin, self.bytes, self.seen)
-        )
-
-
 def get_opener(files_dict, downloader):
     def opener(fname, mode):
         return files_dict[fname].open('r', downloader)
@@ -345,10 +326,9 @@ def rar_sort(a, b):
 
 
 class RarFsFile(object):
-    def __init__(self, filename, file_size, mtime, first_file_offset,
-                 default_file_offset, first_add_size, default_add_size,
-                 first_volume_num, sub_files_dict):
-        self.__init_temp()
+    def __init__(self, filename='', file_size=0, mtime=0, first_file_offset=0,
+                 default_file_offset=0, first_add_size=0, default_add_size=0,
+                 first_volume_num=0, sub_files_dict={}):
         self.filename = filename
         self.file_size = file_size
         self.mtime = mtime
@@ -357,33 +337,52 @@ class RarFsFile(object):
         self.first_add_size = first_add_size
         self.default_add_size = default_add_size
         self.first_volume_num = first_volume_num
-        self.sub_files = sub_files_dict.items()
-        self.sub_files.sort(lambda a, b: rar_sort(a[0], b[0]))
-        self.sub_files = [file for filename, file in self.sub_files]
+        if sub_files_dict:
+            self.sub_files = sub_files_dict.items()
+            self.sub_files.sort(lambda a, b: rar_sort(a[0], b[0]))
+            self.sub_files = [file for filename, file in self.sub_files]
+        else:
+            self.sub_files = []
+
         self.dirty = True
-
-    def __init_temp(self):
         self._lock = threading.RLock()
-        self.dirty = False
 
-    def __getstate__(self):
-        return (
-            self.filename, self.file_size, self.mtime,
-            self.first_file_offset, self.default_file_offset,
-            self.first_add_size, self.default_add_size,
-            self.first_volume_num, self.sub_files,
-        )
+    def load(self, pb):
+        self.filename = pb.filename
+        self.file_size = pb.file_size
+        self.mtime = pb.mtime
+        self.first_file_offset = pb.first_file_offset
+        self.default_file_offset = pb.default_file_offset
+        self.first_add_size = pb.first_add_size
+        self.default_add_size = pb.default_add_size
 
-    def __setstate__(self, state):
-        (self.filename, self.file_size, self.mtime, self.first_file_offset,
-         self.default_file_offset, self.first_add_size, self.default_add_size,
-         self.first_volume_num, self.sub_files) = state
-        self.__init_temp()
+        self.sub_files = []
+        for f in pb.sub_files:
+            yf = YencFsFile()
+            yf.load(f)
+            self.sub_files.append(yf)
+
+    def dump(self):
+        pb = nzbfs_pb2.File()
+        pb.type = nzbfs_pb2.File.RAR
+        pb.filename = self.filename
+        pb.file_size = self.file_size
+        pb.mtime = self.mtime
+        pb.first_file_offset = self.first_file_offset
+        pb.default_file_offset = self.default_file_offset
+        pb.first_add_size = self.first_add_size
+        pb.default_add_size = self.default_add_size
+
+        for yf in self.sub_files:
+            pb.sub_files.extend([yf.dump()])
+
+        return pb
 
     def save(self, path):
         with self._lock:
             if self.dirty or any(file.dirty for file in self.sub_files):
-                pickle.dump(self, open(path, 'w'), pickle.HIGHEST_PROTOCOL)
+                with open(path, 'w') as fh:
+                    fh.write(self.dump().SerializeToString())
                 set_nzf_attr(path, 'type', 'rar')
                 set_nzf_attr(path, 'size', self.file_size)
                 set_nzf_attr(path, 'mtime', self.mtime)
@@ -463,7 +462,19 @@ class RarFsHandle(Handle):
 
 
 def load_nzf_file(fh):
-    return pickle.load(fh)
+    pb = nzbfs_pb2.File.FromString(fh.read())
+
+    if pb.type == nzbfs_pb2.File.YENC:
+        f = YencFsFile()
+    elif pb.type == nzbfs_pb2.File.RAR:
+        f = RarFsFile()
+    else:
+        raise Exception('Unknown nzf file type.')
+
+    f.load(pb)
+    f.dirty = False
+
+    return f
 
 
 def parse_nzb(nzb, downloader):
@@ -488,9 +499,11 @@ def parse_nzb(nzb, downloader):
                 cur_groups.append(elem.text)
 
             elif elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}segment":
-                part = YencPart(number=int(elem.attrib['number']),
-                                message_id=elem.text,
-                                bytes=int(elem.attrib['bytes']))
+                part = nzbfs_pb2.File.YencPart(
+                    number=int(elem.attrib['number']),
+                    message_id=elem.text,
+                    bytes=int(elem.attrib['bytes'])
+                )
                 cur_parts.append(part)
             elem.clear()
 

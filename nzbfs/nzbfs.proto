@@ -1,0 +1,38 @@
+package nzbfs;
+
+message File {
+    enum Type {
+        YENC = 1;
+        RAR = 2;
+    }
+    required Type type = 1;
+
+    optional string filename = 2;
+    optional uint64 file_size = 3;
+    optional uint32 mtime = 4;
+    optional bool seen = 5;
+
+    // YencFsFile
+    optional string subject = 6;
+    optional string poster = 7;
+    repeated string groups = 8;
+
+    message YencPart {
+        optional string message_id = 1;
+        optional uint32 number = 2;
+        optional uint64 begin = 3;
+        optional uint64 bytes = 4;
+        optional bool seen = 5;
+    }
+
+    repeated YencPart parts = 9;
+
+    // RarFsFile
+    optional uint64 first_file_offset = 10;
+    optional uint64 default_file_offset = 11;
+    optional uint64 first_add_size = 12;
+    optional uint64 default_add_size = 13;
+    optional uint32 first_volume_num = 14;
+
+    repeated File sub_files = 15;
+}
