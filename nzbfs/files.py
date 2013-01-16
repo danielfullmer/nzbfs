@@ -261,7 +261,6 @@ class YencFsHandle(Handle):
             if self._file.seen and offset >= self._file.file_size:
                 log.error("Reading past file end.")
                 break
-            #part = self._file._guess_part(offset)
             part_i = self._file._guess_part(offset)
             if part_i >= len(self._file.parts):
                 part_i = len(self._file.parts) - 1
