@@ -97,7 +97,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             if path in self._loaded_files:
                 return self._loaded_files[path]
             else:
-                with open(self.db_root + path, 'r') as fh:
+                with gzip.open(self.db_root + path, 'r') as fh:
                     nzf_file = load_nzf_file(fh)
                 self._loaded_files[path] = nzf_file
                 return nzf_file

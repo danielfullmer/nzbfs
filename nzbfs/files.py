@@ -1,4 +1,5 @@
 import errno
+import gzip
 import itertools
 import logging
 import os
@@ -191,7 +192,7 @@ class YencFsFile(object):
     def save(self, path):
         with self._lock:
             if self.dirty:
-                with open(path, 'w') as fh:
+                with gzip.open(path, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
                 set_nzf_attr(path, 'type', 'nzb')
                 set_nzf_attr(path, 'size', self.file_size)
@@ -380,7 +381,7 @@ class RarFsFile(object):
     def save(self, path):
         with self._lock:
             if self.dirty or any(file.dirty for file in self.sub_files):
-                with open(path, 'w') as fh:
+                with gzip.open(path, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
                 set_nzf_attr(path, 'type', 'rar')
                 set_nzf_attr(path, 'size', self.file_size)
