@@ -275,7 +275,7 @@ class YencFsHandle(Handle):
                 elif part_finished:
                     break
                 elif (part.begin is not None
-                      and part_size > offset - part.begin + size_remaining):
+                      and part_size >= offset - part.begin + size_remaining):
                     break
 
             newdata = line_handler.get_data()
