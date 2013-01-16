@@ -1,5 +1,4 @@
 from collections import deque
-import itertools
 import logging
 import threading
 import os

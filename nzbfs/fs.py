@@ -14,7 +14,7 @@ from nzbfs import fuse
 from nzbfs import rarfile
 from nzbfs.downloader import DownloaderPool
 from nzbfs.files import (get_opener, load_nzf_file, parse_nzb, RarFsFile,
-                         rar_sort, RegularFile, RegularFileHandle, YencFsFile)
+                         rar_sort, RegularFile, RegularFileHandle)
 from nzbfs.utils import (LearningStringMatcher, is_nzf, get_nzf_attr,
                          set_nzf_attr)
 
@@ -205,7 +205,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         return xattr.removexattr(self.db_root + path, name)
 
     def rename(self, oldpath, newpath):
-        ret = os.rename(self.db_root + oldpath, self.db_root + newpath)
+        os.rename(self.db_root + oldpath, self.db_root + newpath)
         if newpath.endswith('.nzb') or newpath.endswith('.nzb.gz'):
             self.process_nzb(newpath)
             os.unlink(self.db_root + newpath)
