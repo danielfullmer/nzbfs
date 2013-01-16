@@ -207,8 +207,8 @@ class YencFsHandle(Handle):
         super(YencFsHandle, self).__init__(*args, **kwargs)
 
     def _fetch(self, part):
-        line_handler = YencLineHandler(self._file, part)
-        update_queue = self._downloader.queue(part, line_handler)
+        update_queue, line_handler = self._downloader.queue(
+            part, lambda: YencLineHandler(self._file, part))
         return update_queue, line_handler
 
     def prefetch(self, size, offset=None):

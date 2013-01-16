@@ -40,8 +40,8 @@ class DownloaderPool(threading.Thread):
             thread.start()
             self._threads.append(thread)
 
-    def queue(self, part, line_handler):
-        """ Queue a task to fetch a particular part.
+    def queue(self, part, line_handler_factory):
+        """Queue a task to fetch a particular part.
 
         Returns a queue where updates about ecoded data will be fed. Each tuple
         returned from the queue is of the form: (finished, size, error)
@@ -55,15 +55,18 @@ class DownloaderPool(threading.Thread):
             cached_data = self._segment_cache.get(part.message_id)
 
             if cached_data:
+                line_handler = line_handler_factory()
                 line_handler.set_data(cached_data)
                 update_queue.put((True, len(cached_data), None))
-                return update_queue
+                return update_queue, line_handler
 
             if part.message_id in self._body_tasks:
                 task = self._body_tasks[part.message_id]
+                line_handler = task.line_handler
                 if task.state is not None:
                     update_queue.put(task.state)
             else:
+                line_handler = line_handler_factory()
                 task = BodyTask(line_handler)
 
                 def _update_cache_cb():
@@ -76,7 +79,7 @@ class DownloaderPool(threading.Thread):
                 self._body_tasks[part.message_id] = task
 
             task.update_queues.append(update_queue)
-            return update_queue
+            return update_queue, line_handler
 
     def status(self):
         s = []
