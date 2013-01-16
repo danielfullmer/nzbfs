@@ -233,7 +233,7 @@ class BodyTask(object):
         try:
             thread.send_body(self.line_handler.part.message_id)
         except nntplib.NNTPTemporaryError, e:
-            self.notify(True, e)
+            self.notify(True, e.message)
             return
         while True:
             line = thread.get_line()

@@ -269,8 +269,8 @@ class YencFsHandle(Handle):
 
             while True:
                 part_finished, part_size, part_error = update_queue.get()
-                if part_error is not None:
-                    log.exception(part_error)
+                if part_error:
+                    log.error(part_error)
                     raise fuse.FuseOSError(errno.EIO)
                 elif part_finished:
                     break
