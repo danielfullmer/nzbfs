@@ -61,7 +61,8 @@ class DownloaderPool(threading.Thread):
 
             if part.message_id in self._body_tasks:
                 task = self._body_tasks[part.message_id]
-                update_queue.put((False, line_handler.get_size(), None))
+                if task.state is not None:
+                    update_queue.put(task.state)
             else:
                 task = BodyTask(line_handler)
 
@@ -218,14 +219,16 @@ class BodyTask(object):
         self.callbacks = []
         self.line_handler = line_handler
         self.update_queues = []
+        self.state = None
 
     def reset(self):
         self.line_handler.reset()
 
     def notify(self, finished, error):
         size = self.line_handler.get_size()
+        self.state = (finished, size, error)
         for queue in self.update_queues:
-            queue.put((finished, size, error))
+            queue.put(self.state)
 
     def execute(self, thread):
         thread.send_group(self.line_handler.file.groups[0])
