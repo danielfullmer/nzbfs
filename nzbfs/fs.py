@@ -150,7 +150,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
     def getxattr(self, path, name, position=0):
         try:
-            ret = xattr.getxattr(self.db_root + path, name)
+            return xattr.getxattr(self.db_root + path, name)
         except IOError:
             return ''
 
