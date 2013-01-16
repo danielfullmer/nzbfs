@@ -11,8 +11,8 @@ from nzbfs import nzbfs_pb2
 from nzbfs.linehandlers import YencLineHandler
 from nzbfs.utils import set_nzf_attr
 
-
 MAX_READAHEAD = 2 * 1024 * 1024
+log = logging.getLogger(__name__)
 
 
 class Handle(object):
@@ -226,13 +226,13 @@ class YencFsHandle(Handle):
                 elif size == 128 * 1024:
                     # The current OS-level readahead limit.
                     size *= self._file._readahead
-                    logging.info("Increasing readahead")
+                    log.info("Increasing readahead")
                     self._file._readahead *= 2
             else:
                 self._file._last_read_offset = offset + size
 
                 if self._file._readahead > 1:
-                    logging.info("Reducing readahead")
+                    log.info("Reducing readahead")
                     self._file._readahead /= 2
 
         base_i = self._file._guess_part(offset)
@@ -248,7 +248,7 @@ class YencFsHandle(Handle):
             offset = self._cur
 
         if offset >= self._file.file_size:
-            logging.error("Reading past file end.")
+            log.error("Reading past file end.")
             return '\0' * size  # TODO: Should I be doing this?
 
         # Start fetching ones we probably need.
@@ -259,7 +259,7 @@ class YencFsHandle(Handle):
         size_remaining = size
         while size_remaining > 0 and tries > 0:
             if self._file.seen and offset >= self._file.file_size:
-                logging.error("Reading past file end.")
+                log.error("Reading past file end.")
                 break
             #part = self._file._guess_part(offset)
             part_i = self._file._guess_part(offset)
@@ -271,7 +271,7 @@ class YencFsHandle(Handle):
             while True:
                 part_finished, part_size, part_error = update_queue.get()
                 if part_error is not None:
-                    logging.exception(part_error)
+                    log.exception(part_error)
                     raise fuse.FuseOSError(errno.EIO)
                 elif part_finished:
                     break
@@ -289,7 +289,7 @@ class YencFsHandle(Handle):
                 size_remaining -= len(newdata)
                 data += newdata
             else:
-                logging.info(
+                log.info(
                     'Missed part. Offset: %d part: %s' % (offset, part))
                 tries -= 1
 
@@ -426,20 +426,20 @@ class RarFsHandle(Handle):
             if (outer_file_offset < 0 or
                     outer_file_offset >= self._file.sub_files[i].file_size):
 
-                logging.error("offset: %d", offset)
-                logging.error("file_offset: %d", file_offset)
-                logging.error("outer_file_offset: %d", outer_file_offset)
-                logging.error("file_length: %d", file_length)
-                logging.error("i: %d", i)
-                logging.error("first_volume_num: %d",
-                              self._file.first_volume_num)
-                logging.error("first_add_size: %d", self._file.first_add_size)
-                logging.error("default_add_size: %d",
-                              self._file.default_add_size)
-                logging.error("first_file_offset: %d",
-                              self._file.first_file_offset)
-                logging.error("default_file_offset: %d",
-                              self._file.default_file_offset)
+                log.error("offset: %d", offset)
+                log.error("file_offset: %d", file_offset)
+                log.error("outer_file_offset: %d", outer_file_offset)
+                log.error("file_length: %d", file_length)
+                log.error("i: %d", i)
+                log.error("first_volume_num: %d",
+                          self._file.first_volume_num)
+                log.error("first_add_size: %d", self._file.first_add_size)
+                log.error("default_add_size: %d",
+                          self._file.default_add_size)
+                log.error("first_file_offset: %d",
+                          self._file.first_file_offset)
+                log.error("default_file_offset: %d",
+                          self._file.default_file_offset)
 
             handle = self._file.sub_files[i].open('r', self._downloader)
             newdata = handle.read(file_length, outer_file_offset)

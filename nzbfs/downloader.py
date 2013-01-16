@@ -8,6 +8,8 @@ import weakref
 
 from nzbfs.utils import MemCache
 
+log = logging.getLogger(__name__)
+
 
 class DownloaderPool(threading.Thread):
     def __init__(self, num_threads, server, port, ssl, username, password):
@@ -82,7 +84,7 @@ class DownloaderPool(threading.Thread):
                 s.append('None')
             else:
                 s.append(thread.status())
-        logging.info("Currently processing: " + " ".join(s))
+        log.info("Currently processing: " + " ".join(s))
 
 
 class DownloaderThread(threading.Thread):
@@ -146,7 +148,7 @@ class DownloaderThread(threading.Thread):
     def get_resp(self):
         line = self.get_line()
         code = line.split(None, 1)[0]
-        logging.debug(line.strip())
+        log.debug(line.strip())
         if code.startswith('4'):
             raise nntplib.NNTPTemporaryError(line)
         if code.startswith('5'):
@@ -154,7 +156,7 @@ class DownloaderThread(threading.Thread):
         return code, line
 
     def send_line(self, line):
-        logging.debug(line.strip())
+        log.debug(line.strip())
         self._sock.sendall(line)
 
     def send_group(self, groupname):
@@ -164,29 +166,29 @@ class DownloaderThread(threading.Thread):
         code, line = self.get_resp()
         self.cur_group = groupname
         if code != '211':
-            logging.info('Unexpected response to "group": %s' % line)
+            log.info('Unexpected response to "group": %s' % line)
 
     def send_body(self, message_id):
         self.send_line('body <%s>\r\n' % message_id)
         code, line = self.get_resp()
         if code != '222':
-            logging.info('Unexpected response to "body": %s' % line)
+            log.info('Unexpected response to "body": %s' % line)
 
     def send_stat(self, message_id):
         self.send_line('stat <%s>\r\n' % message_id)
         code, line = self.get_resp()
         if code != '223':
-            logging.info('Unexpected response to "stat": %s' % line)
+            log.info('Unexpected response to "stat": %s' % line)
 
     def run(self):
         self.connect()
         while True:
             if self.cur_task is None:
-                logging.info("Thread: %d waiting for a new task", self._number)
+                log.info("Thread: %d waiting for a new task", self._number)
                 cur_task = self._task_queue.get()
                 with self._lock:
                     self.cur_task = cur_task
-                logging.info("Thread: %d got %s", self._number, self.cur_task)
+                log.info("Thread: %d got %s", self._number, self.cur_task)
 
             self._pool.status()
 
@@ -194,11 +196,11 @@ class DownloaderThread(threading.Thread):
                 self.cur_task.execute(self)
             except (socket.error, ssl.SSLError, nntplib.NNTPTemporaryError,
                     nntplib.NNTPPermanentError), e:
-                logging.error(e)
-                logging.info("Reconnecting")
+                log.error(e)
+                log.info("Reconnecting")
                 self.connect()
             except Exception, e:
-                logging.error(e)
+                log.error(e)
             else:
                 with self._lock:
                     self.cur_task = None

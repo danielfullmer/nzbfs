@@ -5,6 +5,7 @@ import yenc
 
 # Example: =ybegin part=1 line=128 size=123 name=-=DUMMY=- abc.par
 YSPLIT_RE = re.compile(r'([a-zA-Z0-9]+)=')
+log = logging.getLogger(__name__)
 
 
 class YencLineHandler(object):
@@ -34,7 +35,7 @@ class YencLineHandler(object):
 
     def feed(self, line):
         if line.startswith('=y'):
-            logging.debug(line)
+            log.debug(line)
             self.handle_y(line)
         elif self._state == YencLineHandler.STATE_DECODING and line:
             self._cached_data = None  # Reset data cache

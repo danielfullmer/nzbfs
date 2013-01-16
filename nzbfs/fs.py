@@ -22,6 +22,7 @@ SUBJECT_RE = re.compile(r'^.*"(.*?)".*$')
 SAMPLE_RE = re.compile(r'((^|[\W_])sample\d*[\W_])|(-s\.)', re.I)
 RAR_RE = re.compile(r'\.(?P<ext>part\d*\.rar|rar|s\d\d|r\d\d|\d\d\d)$', re.I)
 RAR_RE_V3 = re.compile(r'\.(?P<ext>part\d*)$', re.I)
+log = logging.getLogger(__name__)
 
 
 class NzbFs(fuse.Operations, fuse.LoggingMixIn):
@@ -70,7 +71,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                 longest_prefix_len = len(prefix)
                 longest_prefix_downloader = downloader
         if longest_prefix_len == 0:
-            logging.error('No downloader!')
+            log.error('No downloader!')
         return longest_prefix_downloader
 
     def _db_root_property(attr):
@@ -274,9 +275,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                 try:
                     handle.read(1)
                 except Exception, e:
-                    logging.exception(e)
+                    log.exception(e)
                 matcher.should_match(file.subject, file.filename)
-            logging.info(filename)
+            log.info(filename)
 
             # TODO: Get the real filesize if it's not a rar, since we try to
             # extract those.
@@ -352,10 +353,10 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                         if x['default_file_offset'] == 0:
                             x['default_file_offset'] = item.file_offset
 
-                        logging.info(item.filename)
+                        log.info(item.filename)
                         x['files_seen'] += 1
                         if x['files_seen'] >= max_files:
-                            logging.info("Done parsing")
+                            log.info("Done parsing")
                             return True  # Stop parsing
 
             tmp_rf = rarfile.RarFile(first_rar_filename,
