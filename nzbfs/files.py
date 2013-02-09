@@ -194,7 +194,6 @@ class YencFsFile(object):
             if self.dirty:
                 with gzip.open(path, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
-                set_nzf_attr(path, 'type', 'nzb')
                 set_nzf_attr(path, 'size', self.file_size)
                 set_nzf_attr(path, 'mtime', self.mtime)
                 self.dirty = False
@@ -383,7 +382,6 @@ class RarFsFile(object):
             if self.dirty or any(file.dirty for file in self.sub_files):
                 with gzip.open(path, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
-                set_nzf_attr(path, 'type', 'rar')
                 set_nzf_attr(path, 'size', self.file_size)
                 set_nzf_attr(path, 'mtime', self.mtime)
                 self.dirty = False
