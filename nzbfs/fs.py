@@ -13,16 +13,29 @@ import xattr
 from nzbfs import fuse
 from nzbfs import rarfile
 from nzbfs.downloader import DownloaderPool
-from nzbfs.files import (get_opener, load_nzf_file, parse_nzb, RarFsFile,
+from nzbfs.files import (get_opener, load_nzbfs_file, parse_nzb, RarFsFile,
                          rar_sort, RegularFile, RegularFileHandle)
-from nzbfs.utils import (LearningStringMatcher, is_nzf, get_nzf_attr,
-                         set_nzf_attr)
+from nzbfs.utils import LearningStringMatcher
 
 SUBJECT_RE = re.compile(r'^.*"(.*?)".*$')
 SAMPLE_RE = re.compile(r'((^|[\W_])sample\d*[\W_])|(-s\.)', re.I)
 RAR_RE = re.compile(r'\.(?P<ext>part\d*\.rar|rar|s\d\d|r\d\d|\d\d\d)$', re.I)
 RAR_RE_V3 = re.compile(r'\.(?P<ext>part\d*)$', re.I)
+NZBFS_FILENAME_RE = re.compile(r'(.*)-(\d+)\.nzbfs$')
 log = logging.getLogger(__name__)
+
+
+def get_nzbfs_filename(db_root, path):
+    dirname = os.path.dirname(path)
+    basename = os.path.basename(path)
+
+    for filename in os.listdir(db_root + dirname):
+        if filename.startswith(basename):
+            match = NZBFS_FILENAME_RE.search(filename)
+            if match:
+                return os.path.join(dirname, filename), int(match.group(2))
+
+    return path, 0
 
 
 class NzbFs(fuse.Operations, fuse.LoggingMixIn):
@@ -74,12 +87,18 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             log.error('No downloader!')
         return longest_prefix_downloader
 
+    # TODO: Replace with a file?
     def _db_root_property(attr):
         def _get_attr(self):
-            return get_nzf_attr(self.db_root, attr)
+            try:
+                ret = xattr.getxattr(self.db_root, 'user.nzbfs.' + attr)
+                return int(ret)
+            except IOError:
+                return None
 
         def _set_attr(self, value):
-            return set_nzf_attr(self.db_root, attr, value)
+            return xattr.setxattr(
+                self.db_root, 'user.nzbfs.' + attr, str(value))
 
         return property(_get_attr, _set_attr)
 
@@ -87,35 +106,40 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
     total_size = _db_root_property('total_size')
 
     def load_file(self, path):
-        if is_nzf(self.db_root + path):
-            return self._load_nzf_file(path)
+        path, file_size = get_nzbfs_filename(self.db_root, path)
+        if file_size:
+            return self._load_nzbfs_file(path)
         else:
             return self._load_reg_file(path)
 
-    def _load_nzf_file(self, path):
+    def _load_nzbfs_file(self, path):
         with self._loaded_files_lock:
             if path in self._loaded_files:
                 return self._loaded_files[path]
             else:
                 with gzip.open(self.db_root + path, 'r') as fh:
-                    nzf_file = load_nzf_file(fh)
-                self._loaded_files[path] = nzf_file
-                return nzf_file
+                    nzbfs_file = load_nzbfs_file(fh)
+                self._loaded_files[path] = nzbfs_file
+                return nzbfs_file
 
     def _load_reg_file(self, path):
         return RegularFile(self.db_root + path)
 
     def access(self, path, mode):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         if not os.access(self.db_root + path, mode):
             raise fuse.FuseOSError(errno.EACCES)
 
     def chmod(self, path, mode):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return os.chmod(self.db_root + path, mode)
 
     def chown(self, path, uid, gid):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return os.chown(self.db_root + path, uid, gid)
 
     def create(self, path, mode, fi=None):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         fd = os.open(self.db_root + path, os.O_WRONLY | os.O_CREAT, mode)
         with self._open_handles_lock:
             self._last_fh += 1
@@ -129,6 +153,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         return self._open_handles[fh].fsync()
 
     def getattr(self, path, fh=None):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         st = os.lstat(self.db_root + path)
 
         d = {
@@ -138,32 +163,33 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         }
 
         if stat.S_ISREG(st.st_mode):
-            nzf_size = get_nzf_attr(self.db_root + path, 'size')
-            if nzf_size is not None:
-                d['st_size'] = nzf_size
-            nzf_mtime = get_nzf_attr(self.db_root + path, 'mtime')
-            if nzf_mtime is not None:
-                d['st_mtime'] = nzf_mtime
+            if file_size:
+                d['st_size'] = file_size
         d['st_blocks'] = d['st_size'] / 512
 
         return d
 
     def getxattr(self, path, name, position=0):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         try:
             return xattr.getxattr(self.db_root + path, name)
         except IOError:
             return ''
 
     def link(self, target, source):
-        return os.link(self.db_root + source, self.db_root + target)
+        source, file_size = get_nzbfs_filename(self.db_root + source)
+        return os.link(source, self.db_root + target)
 
     def listxattr(self, path):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return xattr.listxattr(self.db_root + path)
 
     def mkdir(self, path, mode):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return os.mkdir(self.db_root + path, mode)
 
     def mknod(self, path, mode, dev):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return os.mknod(self.db_root + path, mode, dev)
 
     def open(self, path, flags):
@@ -180,18 +206,22 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
     def readdir(self, path, fh):
         yield '.'
         yield '..'
-        for name in os.listdir('%s/%s' % (self.db_root, path)):
-            yield name
+        for name in os.listdir(self.db_root + path):
+            match = NZBFS_FILENAME_RE.search(name)
+            if match:
+                yield match.group(1)
+            else:
+                yield name
 
     def readlink(self, path):
-        return os.readlink('%s/%s' % (self.db_root, path))
+        return os.readlink(self.db_root + path)
 
     def release(self, path, fh):
         ret = self._open_handles[fh].release()
 
         file = self._loaded_files.get(path)
         if file:
-            file.save(self.db_root + path)
+            file.save(self.db_root, path)
 
         del self._open_handles[fh]
 
@@ -202,18 +232,28 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         return ret
 
     def removexattr(self, path, name):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return xattr.removexattr(self.db_root + path, name)
 
     def rename(self, oldpath, newpath):
-        os.rename(self.db_root + oldpath, self.db_root + newpath)
+        oldpath, file_size = get_nzbfs_filename(self.db_root, oldpath)
+        if file_size:
+            os.rename(
+                self.db_root + oldpath,
+                self.db_root + newpath + '-' + str(file_size) + '.nzbfs')
+        else:
+            os.rename(self.db_root + oldpath, self.db_root + newpath)
+
         if newpath.endswith('.nzb') or newpath.endswith('.nzb.gz'):
             self.process_nzb(newpath)
             os.unlink(self.db_root + newpath)
 
     def rmdir(self, path):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return os.rmdir(self.db_root + path)
 
     def setxattr(self, path, name, value, options, position=0):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         if name == 'user.nzbfs.cmd':
             return self.command(path, value)
         return xattr.setxattr(self.db_root + path, name, value)
@@ -226,23 +266,25 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         }
 
     def symlink(self, target, source):
-        return os.symlink(self.db_root + source, self.db_root + target)
+        os.symlink(source, self.db_root + target)
 
     def truncate(self, path, length, fh=None):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         with open(self.db_root + path, 'r+') as f:
             f.truncate(length)
 
     def unlink(self, path):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         try:
-            if xattr.getxattr(self.db_root + path, 'user.nzbfs.type') == 'nzb':
+            if file_size:
                 with self._attr_lock:
-                    file_size = get_nzf_attr(self.db_root + path, 'size')
                     self.total_files -= 1
                     self.total_size -= file_size
         finally:
             return os.unlink(self.db_root + path)
 
     def utimens(self, path, times=None):
+        path, file_size = get_nzbfs_filename(self.db_root, path)
         return os.utime(self.db_root + path, times)
 
     def write(self, path, data, offset, fh):
@@ -253,10 +295,10 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         downloader = self._get_downloader(path)
 
         if path.endswith('.gz'):
-            fh = gzip.open("%s/%s" % (self.db_root, path))
+            fh = gzip.open(self.db_root + path)
             basepath = path[:-7]
         else:
-            fh = open("%s/%s" % (self.db_root, path))
+            fh = open(self.db_root + path)
             basepath = path[:-4]
 
         sum_files = sum_size = 0
@@ -285,7 +327,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             #    handle.read(1)
 
             filename = file.filename.replace('/', '-')
-            file.save("%s/%s/%s" % (self.db_root, basepath, filename))
+            file.save(self.db_root, '%s/%s' % (basepath, filename))
             sum_files += 1
             sum_size += file.file_size
 
@@ -316,7 +358,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         max_files = 1
 
         rars = [filename
-                for filename in os.listdir(self.db_root + path)
+                for filename in self.readdir(path, None)
                 if RAR_RE.search(filename)]
 
         rar_sets = {}
@@ -373,10 +415,10 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                 else:
                     raise Exception('Extract from compressed rar file %s' %
                                     first_rar_filename)
-                rf.save('%s/%s/%s' % (self.db_root, path, ri.filename))
+                rf.save(self.db_root, '%s/%s' % (path, ri.filename))
 
             for rar_filename in rar_sets[rar_set]:
-                os.unlink('%s/%s/%s' % (self.db_root, path, rar_filename))
+                self.unlink('%s/%s' % (path, rar_filename))
 
     def check(self, path):
         downloader = self._get_downloader(path)

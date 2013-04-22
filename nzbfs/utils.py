@@ -4,8 +4,6 @@ import threading
 import os
 import re
 
-import xattr
-
 
 class MemCache(object):
     def __init__(self, cache_limit):
@@ -113,22 +111,3 @@ class LearningStringMatcher(object):
         pattern = re.sub(r'\d+\\/\d+', r'\d+/\d+', pattern)
         pattern = re.sub(r'\d+\s*of\s*\d+', r'\d+\s*of\s*\d+', pattern)
         self.patterns.append(re.compile(pattern))
-
-
-def is_nzf(path):
-    if os.path.isfile(path):
-        return 'user.nzbfs.size' in xattr.listxattr(path)
-    else:
-        return False
-
-
-def get_nzf_attr(path, attr):
-    try:
-        ret = xattr.getxattr(path, 'user.nzbfs.' + attr)
-        return int(ret)
-    except IOError:
-        return None
-
-
-def set_nzf_attr(path, attr, value):
-    xattr.setxattr(path, 'user.nzbfs.' + attr, str(value))

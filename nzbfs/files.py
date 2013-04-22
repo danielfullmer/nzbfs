@@ -10,7 +10,6 @@ import xml.etree.cElementTree as ElementTree
 from nzbfs import fuse
 from nzbfs import nzbfs_pb2
 from nzbfs.linehandlers import YencLineHandler
-from nzbfs.utils import set_nzf_attr
 
 MAX_READAHEAD = 2 * 1024 * 1024
 log = logging.getLogger(__name__)
@@ -189,13 +188,14 @@ class YencFsFile(object):
         pb.parts.extend(self.parts)
         return pb
 
-    def save(self, path):
+    def save(self, db_root, path):
         with self._lock:
             if self.dirty:
-                with gzip.open(path, 'w') as fh:
+                realpath = '%s%s-%s.nzbfs' % (
+                    db_root, path, str(self.file_size))
+                with gzip.open(realpath, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
-                set_nzf_attr(path, 'size', self.file_size)
-                set_nzf_attr(path, 'mtime', self.mtime)
+                os.utime(realpath, (-1, self.mtime))
                 self.dirty = False
 
     def open(self, mode, downloader):
@@ -377,13 +377,14 @@ class RarFsFile(object):
 
         return pb
 
-    def save(self, path):
+    def save(self, db_root, path):
         with self._lock:
             if self.dirty or any(file.dirty for file in self.sub_files):
-                with gzip.open(path, 'w') as fh:
+                realpath = '%s%s-%s.nzbfs' % (
+                    db_root, path, str(self.file_size))
+                with gzip.open(realpath, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
-                set_nzf_attr(path, 'size', self.file_size)
-                set_nzf_attr(path, 'mtime', self.mtime)
+                os.utime(realpath, (-1, self.mtime))
                 self.dirty = False
 
     def open(self, mode, downloader):
@@ -459,7 +460,7 @@ class RarFsHandle(Handle):
         return True
 
 
-def load_nzf_file(fh):
+def load_nzbfs_file(fh):
     pb = nzbfs_pb2.File.FromString(fh.read())
 
     if pb.type == nzbfs_pb2.File.YENC:
@@ -467,7 +468,7 @@ def load_nzf_file(fh):
     elif pb.type == nzbfs_pb2.File.RAR:
         f = RarFsFile()
     else:
-        raise Exception('Unknown nzf file type.')
+        raise Exception('Unknown nzbfs file type.')
 
     f.load(pb)
     f.dirty = False
