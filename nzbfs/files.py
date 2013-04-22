@@ -197,6 +197,8 @@ class YencFsFile(object):
                     fh.write(self.dump().SerializeToString())
                 os.utime(realpath, (-1, self.mtime))
                 self.dirty = False
+                
+                return realpath
 
     def open(self, mode, downloader):
         return YencFsHandle(self, downloader)
@@ -386,6 +388,8 @@ class RarFsFile(object):
                     fh.write(self.dump().SerializeToString())
                 os.utime(realpath, (-1, self.mtime))
                 self.dirty = False
+
+                return realpath
 
     def open(self, mode, downloader):
         return RarFsHandle(self, downloader)

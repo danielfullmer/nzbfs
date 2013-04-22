@@ -108,7 +108,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
     def load_file(self, path):
         path, file_size = get_nzbfs_filename(self.db_root, path)
         if file_size:
-            return self._load_nzbfs_file(path)
+            nzbfs_file = self._load_nzbfs_file(path)
+            nzbfs_file.orig_path = path
+            return nzbfs_file
         else:
             return self._load_reg_file(path)
 
@@ -221,7 +223,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
         file = self._loaded_files.get(path)
         if file:
-            file.save(self.db_root, path)
+            savedpath = file.save(self.db_root, path)
+            if savedpath != file.orig_path:
+                os.unlink(file.orig_path)
 
         del self._open_handles[fh]
 
