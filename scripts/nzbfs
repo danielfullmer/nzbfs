@@ -4,7 +4,7 @@ import ConfigParser
 import logging
 import optparse
 
-from nzbfs import NzbFs, fuse
+from nzbfs import NzbFs, fuse, __version__
 
 def get_nzbfs(config_file):
     defaults = {'threads': '4', 'port':  '119', 'ssl': 'false'}
@@ -15,7 +15,8 @@ def get_nzbfs(config_file):
 
 def main():
     parser = optparse.OptionParser(
-        usage='%prog [options] <db root> <mount point>', version='%prog 0.1a')
+        usage='%prog [options] <db root> <mount point>',
+        version='%prog ' + __version__)
     parser.add_option("-c", '--config', default='.nzbfs.cfg',
                       help='use config file')
     parser.add_option('-d', '--debug', action='store_true',
