@@ -49,7 +49,3 @@ Misc
     $ ls /mnt
 
 Yep, that just happened.
-
-Also, try adding a lot of NZB files and running:
-
-    $ df -h

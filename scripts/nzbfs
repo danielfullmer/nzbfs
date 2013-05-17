@@ -1,17 +1,10 @@
 #!/usr/bin/env python
 
-import ConfigParser
 import logging
 import optparse
 
 from nzbfs import NzbFs, fuse, __version__
 
-def get_nzbfs(config_file):
-    defaults = {'threads': '4', 'port':  '119', 'ssl': 'false'}
-    config = ConfigParser.SafeConfigParser(defaults)
-    config.read(config_file)
-    nzbfs = NzbFs(config)
-    return nzbfs
 
 def main():
     parser = optparse.OptionParser(
@@ -28,7 +21,7 @@ def main():
     if len(args) < 1:
         parser.error('Need a mount point')
 
-    nzbfs = get_nzbfs(options.config)
+    nzbfs = NzbFs(options.config)
 
     fuse.FUSE(
         nzbfs, args[0],

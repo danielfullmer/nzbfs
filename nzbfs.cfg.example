@@ -1,6 +1,7 @@
 [nzbfs]
 db_root = /home/username/nzbdb
-post_process = /home/username/nzbfs/nzbfs-postprocess
+process_nzb_script = nzbfs-process-nzb
+post_process_script = /home/username/postprocess
 
 [/]
 server = example.com

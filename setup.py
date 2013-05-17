@@ -8,6 +8,9 @@ setup(
     name='nzbfs',
     version=__version__,
     packages=['nzbfs'],
-    scripts=['scripts/nzbfs'],
+    scripts=[
+        'scripts/nzbfs',
+        'scripts/nzbfs-process-nzb'
+    ],
     requires=['xattr', 'yenc', 'google.protobuf'],
 )

@@ -1,3 +1,4 @@
+import ConfigParser
 import calendar
 import errno
 import gzip
@@ -5,6 +6,7 @@ import logging
 import os
 import re
 import stat
+import subprocess
 import threading
 import weakref
 
@@ -13,16 +15,15 @@ import xattr
 from nzbfs import fuse
 from nzbfs import rarfile
 from nzbfs.downloader import DownloaderPool
-from nzbfs.files import (get_opener, load_nzbfs_file, parse_nzb, RarFsFile,
+from nzbfs.files import (get_opener, load_nzbfs_file, RarFsFile,
                          rar_sort, RegularFile, RegularFileHandle)
-from nzbfs.utils import LearningStringMatcher
 
-SUBJECT_RE = re.compile(r'^.*"(.*?)".*$')
-SAMPLE_RE = re.compile(r'((^|[\W_])sample\d*[\W_])|(-s\.)', re.I)
+log = logging.getLogger(__name__)
+
+NZBFS_FILENAME_RE = re.compile(r'(.*)-(\d+)\.nzbfs$')
+#SAMPLE_RE = re.compile(r'((^|[\W_])sample\d*[\W_])|(-s\.)', re.I)
 RAR_RE = re.compile(r'\.(?P<ext>part\d*\.rar|rar|s\d\d|r\d\d|\d\d\d)$', re.I)
 RAR_RE_V3 = re.compile(r'\.(?P<ext>part\d*)$', re.I)
-NZBFS_FILENAME_RE = re.compile(r'(.*)-(\d+)\.nzbfs$')
-log = logging.getLogger(__name__)
 
 
 def get_nzbfs_filename(db_root, path):
@@ -39,14 +40,20 @@ def get_nzbfs_filename(db_root, path):
 
 
 class NzbFs(fuse.Operations, fuse.LoggingMixIn):
-    def __init__(self, config, *args, **kwargs):
+    def __init__(self, config_file, *args, **kwargs):
         super(NzbFs, self).__init__(*args, **kwargs)
 
+        self.config_file = config_file
+        config = ConfigParser.SafeConfigParser({
+            'process_nzb_script': 'nzbfs-process-nzb',
+            'threads': '4',
+            'port':  '119',
+            'ssl': 'false'
+        })
+        config.read(config_file)
+
         self.db_root = config.get('nzbfs', 'db_root')
-        if config.has_option('nzbfs', 'post_process'):
-            self.post_process_script = config.get('nzbfs', 'post_process')
-        else:
-            self.post_process_script = False
+        self.process_nzb_script = config.get('nzbfs', 'process_nzb_script')
 
         self._downloaders = {}
         for section in config.sections():
@@ -223,15 +230,18 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
         file = self._loaded_files.get(path)
         if file:
-            savedpath = file.save(self.db_root, path)
-            if savedpath != file.orig_path:
+            if path.endswith('.tmp-autorename'):
+                file.save(self.db_root + file.filename)
                 os.unlink(file.orig_path)
+            else:
+                savedpath = file.save(self.db_root + path)
+                if savedpath != file.orig_path:
+                    os.unlink(file.orig_path)
 
         del self._open_handles[fh]
 
         if path.endswith('.nzb') or path.endswith('.nzb.gz'):
-            self.process_nzb(path)
-            os.unlink(self.db_root + path)
+            subprocess.Popen([self.process_nzb_script, self.db_root + path])
 
         return ret
 
@@ -249,8 +259,8 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             os.rename(self.db_root + oldpath, self.db_root + newpath)
 
         if newpath.endswith('.nzb') or newpath.endswith('.nzb.gz'):
-            self.process_nzb(newpath)
-            os.unlink(self.db_root + newpath)
+            subprocess.Popen([self.process_nzb_script, self.db_root + newpath])
+
 
     def rmdir(self, path):
         path, file_size = get_nzbfs_filename(self.db_root, path)
@@ -293,57 +303,6 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
     def write(self, path, data, offset, fh):
         return self._open_handles[fh].write(data, offset)
-
-    def process_nzb(self, path):
-        """Add an nzb to the filesystem."""
-        downloader = self._get_downloader(path)
-
-        if path.endswith('.gz'):
-            fh = gzip.open(self.db_root + path)
-            basepath = path[:-7]
-        else:
-            fh = open(self.db_root + path)
-            basepath = path[:-4]
-
-        sum_files = sum_size = 0
-        matcher = LearningStringMatcher([SUBJECT_RE])
-
-        if not os.path.isdir("%s/%s" % (self.db_root, basepath)):
-            os.mkdir("%s/%s" % (self.db_root, basepath))
-
-        for file in parse_nzb(fh, downloader):
-            handle = file.open('r', downloader)
-
-            filename = matcher.match(file.subject)
-            if filename:
-                file.filename = filename
-            if filename is None:
-                try:
-                    handle.read(1)
-                except Exception, e:
-                    log.exception(e)
-                matcher.should_match(file.subject, file.filename)
-            log.info(filename)
-
-            # TODO: Get the real filesize if it's not a rar, since we try to
-            # extract those.
-            #if not RAR_RE.search(file.filename):
-            #    handle.read(1)
-
-            filename = file.filename.replace('/', '-')
-            file.save(self.db_root, '%s/%s' % (basepath, filename))
-            sum_files += 1
-            sum_size += file.file_size
-
-        with self._attr_lock:
-            self.total_files += sum_files
-            self.total_size += sum_size
-
-        self.post_process(basepath)
-
-    def post_process(self, path):
-        if self.post_process_script:
-            os.system('"%s" "%s" &' % (self.post_process_script, path))
 
     _commands = ['extract', 'extract_rars', 'extract_splits', 'check', 'info']
 
@@ -419,7 +378,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                 else:
                     raise Exception('Extract from compressed rar file %s' %
                                     first_rar_filename)
-                rf.save(self.db_root, '%s/%s' % (path, ri.filename))
+                rf.save('%s%s/%s' % (self.db_root, path, ri.filename))
 
             for rar_filename in rar_sets[rar_set]:
                 self.unlink('%s/%s' % (path, rar_filename))

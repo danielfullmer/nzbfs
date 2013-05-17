@@ -2,7 +2,6 @@ from collections import deque
 import logging
 import threading
 import os
-import re
 
 
 class MemCache(object):
@@ -95,19 +94,3 @@ class CacheChain(object):
         return None
 
 
-class LearningStringMatcher(object):
-    def __init__(self, patterns=None):
-        self.patterns = patterns or []
-
-    def match(self, input):
-        for pattern in self.patterns:
-            m = pattern.match(input)
-            if m:
-                return m.group(1)
-        return None
-
-    def should_match(self, input, expected_output):
-        pattern = re.escape(input).replace(re.escape(expected_output), '(.*?)')
-        pattern = re.sub(r'\d+\\/\d+', r'\d+/\d+', pattern)
-        pattern = re.sub(r'\d+\s*of\s*\d+', r'\d+\s*of\s*\d+', pattern)
-        self.patterns.append(re.compile(pattern))

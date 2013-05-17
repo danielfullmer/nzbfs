@@ -5,8 +5,6 @@ import logging
 import os
 import threading
 
-import xml.etree.cElementTree as ElementTree
-
 from nzbfs import fuse
 from nzbfs import nzbfs_pb2
 from nzbfs.linehandlers import YencLineHandler
@@ -188,16 +186,16 @@ class YencFsFile(object):
         pb.parts.extend(self.parts)
         return pb
 
-    def save(self, db_root, path):
+    def save(self, path):
         with self._lock:
             if self.dirty:
-                realpath = '%s%s-%s.nzbfs' % (
-                    db_root, path, str(self.file_size))
+                realpath = '%s-%s.nzbfs' % (
+                    path, str(self.file_size))
                 with gzip.open(realpath, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
                 os.utime(realpath, (-1, self.mtime))
                 self.dirty = False
-                
+
                 return realpath
 
     def open(self, mode, downloader):
@@ -379,11 +377,11 @@ class RarFsFile(object):
 
         return pb
 
-    def save(self, db_root, path):
+    def save(self, path):
         with self._lock:
             if self.dirty or any(file.dirty for file in self.sub_files):
-                realpath = '%s%s-%s.nzbfs' % (
-                    db_root, path, str(self.file_size))
+                realpath = '%s-%s.nzbfs' % (
+                    path, str(self.file_size))
                 with gzip.open(realpath, 'w') as fh:
                     fh.write(self.dump().SerializeToString())
                 os.utime(realpath, (-1, self.mtime))
@@ -478,37 +476,6 @@ def load_nzbfs_file(fh):
     f.dirty = False
 
     return f
-
-
-def parse_nzb(nzb, downloader):
-    context = ElementTree.iterparse(nzb, events=("start", "end"))
-
-    for event, elem in context:
-        if event == "start":
-            if elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}file":
-                cur_poster = elem.attrib['poster']
-                cur_date = int(elem.attrib['date'])
-                cur_subject = elem.attrib['subject']
-                cur_parts = []
-                cur_groups = []
-
-        elif event == "end":
-            if elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}file":
-                cur_parts.sort(key=lambda part: part.number)
-                yield YencFsFile(
-                    cur_subject, cur_poster, cur_date, cur_groups, cur_parts)
-
-            elif elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}group":
-                cur_groups.append(elem.text)
-
-            elif elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}segment":
-                part = nzbfs_pb2.File.YencPart(
-                    number=int(elem.attrib['number']),
-                    message_id=elem.text,
-                    bytes=int(elem.attrib['bytes'])
-                )
-                cur_parts.append(part)
-            elem.clear()
 
 
 def reverse_enumerate(l):
