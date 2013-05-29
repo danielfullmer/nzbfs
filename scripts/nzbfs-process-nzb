@@ -1,0 +1,145 @@
+#!/usr/bin/env python
+
+import ConfigParser
+import gzip
+import logging
+import optparse
+import os
+import re
+import subprocess
+import sys
+
+import xml.etree.cElementTree as ElementTree
+
+from nzbfs import nzbfs_pb2, __version__
+from nzbfs.files import YencFsFile
+
+log = logging.getLogger('nzbfs-process-nzb')
+
+SUBJECT_RE = re.compile(r'^.*"(.*?)".*$')
+
+
+class LearningStringMatcher(object):
+    def __init__(self, patterns=None):
+        self.patterns = patterns or []
+
+    def match(self, input):
+        for pattern in self.patterns:
+            m = pattern.match(input)
+            if m:
+                return m.group(1)
+        return None
+
+    def should_match(self, input, expected_output):
+        pattern = re.escape(input).replace(re.escape(expected_output), '(.*?)')
+        pattern = re.sub(r'\d+\\/\d+', r'\d+/\d+', pattern)
+        pattern = re.sub(r'\d+\s*of\s*\d+', r'\d+\s*of\s*\d+', pattern)
+        self.patterns.append(re.compile(pattern))
+
+
+def parse_nzb(nzb):
+    context = ElementTree.iterparse(nzb, events=("start", "end"))
+
+    for event, elem in context:
+        if event == "start":
+            if elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}file":
+                cur_poster = elem.attrib['poster']
+                cur_date = int(elem.attrib['date'])
+                cur_subject = elem.attrib['subject']
+                cur_parts = []
+                cur_groups = []
+
+        elif event == "end":
+            if elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}file":
+                cur_parts.sort(key=lambda part: part.number)
+                yield YencFsFile(
+                    cur_subject, cur_poster, cur_date, cur_groups, cur_parts)
+
+            elif elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}group":
+                cur_groups.append(elem.text)
+
+            elif elem.tag == "{http://www.newzbin.com/DTD/2003/nzb}segment":
+                part = nzbfs_pb2.File.YencPart(
+                    number=int(elem.attrib['number']),
+                    message_id=elem.text,
+                    bytes=int(elem.attrib['bytes'])
+                )
+                cur_parts.append(part)
+            elem.clear()
+
+
+def process_nzb(path):
+    """Add an nzb to the filesystem."""
+    if path.endswith('.gz'):
+        fh = gzip.open(path)
+        basepath = path[:-7]
+    else:
+        fh = open(path)
+        basepath = path[:-4]
+
+    matcher = LearningStringMatcher([SUBJECT_RE])
+
+    if not os.path.isdir(basepath):
+        os.mkdir(basepath)
+
+    files = parse_nzb(fh)
+
+    for file in files:
+        filename = matcher.match(file.subject)
+        if filename:
+            file.filename = filename
+        else:
+            try:
+                tmpfile = os.path.join(basepath, '.tmp-autorename')
+                file.save(tmpfile)
+                with open(tmpfile, 'r') as fh:
+                    fh.read(1)
+            except Exception, e:
+                log.exception(e)
+
+            # TODO: This currently doesn't work, we only know real filename if
+            # we re-open the file :(
+            matcher.should_match(file.subject, file.filename)
+
+        log.info('New file: %s', filename)
+
+        filename = file.filename.replace('/', '-')
+        file.save(os.path.join(basepath, filename))
+
+    return basepath
+
+
+def main():
+    parser = optparse.OptionParser(
+        usage='%prog [options] <db root> <mount point>',
+        version='%prog ' + __version__)
+    parser.add_option("-c", '--config', default='.nzbfs.cfg',
+                      help='use config file')
+    parser.add_option('-d', '--debug', action='store_true',
+                      help='enable debug mode')
+    options, args = parser.parse_args()
+
+    if options.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    if len(sys.argv) < 2:
+        raise Exception('Need an nzb file to process')
+
+    config = ConfigParser.SafeConfigParser({
+        'process_nzb_script': 'nzbfs-process-nzb',
+        'threads': '4',
+        'port':  '119',
+        'ssl': 'false'
+    })
+    config.read(options.config)
+
+    # TODO: Set total_files and total_size correctly.
+    basepath = process_nzb(sys.argv[1])
+    os.unlink(sys.argv[1])
+
+    if config.has_option('nzbfs', 'post_process_script'):
+        post_process_script = config.get('nzbfs', 'post_process_script')
+        subprocess.Popen([post_process_script, basepath])
+
+
+if __name__ == '__main__':
+    main()
