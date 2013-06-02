@@ -242,8 +242,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         del self._open_handles[fh]
 
         if path.endswith('.nzb') or path.endswith('.nzb.gz'):
-            subprocess.check_call([self.process_nzb_script, self.db_root + path])
-            subprocess.Popen([self.post_process_script, self.db_root +
+            subprocess.check_call([self.process_nzb_script,
+                                   self.db_root + path])
+            subprocess.Popen([self.post_process_script,
                               path.replace('.nzb', '')])
 
         return ret
@@ -262,8 +263,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             os.rename(self.db_root + oldpath, self.db_root + newpath)
 
         if newpath.endswith('.nzb') or newpath.endswith('.nzb.gz'):
-            subprocess.check_call([self.process_nzb_script, self.db_root + newpath])
-            subprocess.Popen([self.post_process_script, self.db_root +
+            subprocess.check_call([self.process_nzb_script,
+                                   self.db_root + newpath])
+            subprocess.Popen([self.post_process_script,
                               path.replace('.nzb', '')])
 
 
