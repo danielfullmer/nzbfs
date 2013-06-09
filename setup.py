@@ -10,7 +10,8 @@ setup(
     packages=['nzbfs'],
     scripts=[
         'scripts/nzbfs',
-        'scripts/nzbfs-process-nzb'
+        'scripts/nzbfs-process-nzb',
+        'scripts/nzbfs-extract-rars'
     ],
     requires=['xattr', 'yenc', 'google.protobuf'],
 )

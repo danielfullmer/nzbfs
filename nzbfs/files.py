@@ -3,12 +3,14 @@ import gzip
 import itertools
 import logging
 import os
+import re
 import threading
 
 from nzbfs import fuse
 from nzbfs import nzbfs_pb2
 from nzbfs.linehandlers import YencLineHandler
 
+NZBFS_FILENAME_RE = re.compile(r'(.*)-(\d+)\.nzbfs$')
 MAX_READAHEAD = 2 * 1024 * 1024
 log = logging.getLogger(__name__)
 
@@ -301,33 +303,10 @@ class YencFsHandle(Handle):
         return task.complete
 
 
-def get_opener(files_dict, downloader):
-    def opener(fname, mode):
-        return files_dict[fname].open('r', downloader)
-    return opener
-
-
-# Sort the various RAR filename formats properly :\
-def rar_sort(a, b):
-    """ Define sort method for rar file names
-    """
-    aext = a.split('.')[-1]
-    bext = b.split('.')[-1]
-
-    if aext == 'rar' and bext == 'rar':
-        return cmp(a, b)
-    elif aext == 'rar':
-        return -1
-    elif bext == 'rar':
-        return 1
-    else:
-        return cmp(a, b)
-
-
 class RarFsFile(object):
     def __init__(self, filename='', file_size=0, mtime=0, first_file_offset=0,
                  default_file_offset=0, first_add_size=0, default_add_size=0,
-                 first_volume_num=0, sub_files_dict={}):
+                 first_volume_num=0, sub_files=None):
         self.filename = filename
         self.file_size = file_size
         self.mtime = mtime
@@ -336,10 +315,8 @@ class RarFsFile(object):
         self.first_add_size = first_add_size
         self.default_add_size = default_add_size
         self.first_volume_num = first_volume_num
-        if sub_files_dict:
-            self.sub_files = sub_files_dict.items()
-            self.sub_files.sort(lambda a, b: rar_sort(a[0], b[0]))
-            self.sub_files = [file for filename, file in self.sub_files]
+        if sub_files:
+            self.sub_files = sub_files
         else:
             self.sub_files = []
 
@@ -462,8 +439,29 @@ class RarFsHandle(Handle):
         return True
 
 
-def load_nzbfs_file(fh):
-    pb = nzbfs_pb2.File.FromString(fh.read())
+def get_nzbfs_filepath(path):
+    dirname = os.path.dirname(path)
+    basename = os.path.basename(path)
+
+    # Check to see if this is currently a .nzbfs file
+    match = NZBFS_FILENAME_RE.search(path)
+    if match:
+        return path, 0
+
+    # Otherwise, search for an nzbfs file that matches this path
+    for filename in os.listdir(dirname):
+        if filename.startswith(basename):
+            match = NZBFS_FILENAME_RE.search(filename)
+            if match:
+                return os.path.join(dirname, filename), int(match.group(2))
+
+    # If not found, just use the original file
+    return path, 0
+
+
+def load_nzbfs_file(path):
+    with gzip.open(path, 'r') as fh:
+        pb = nzbfs_pb2.File.FromString(fh.read())
 
     if pb.type == nzbfs_pb2.File.YENC:
         f = YencFsFile()
