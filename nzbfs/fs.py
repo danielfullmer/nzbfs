@@ -224,7 +224,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         return xattr.removexattr(nzbfs_filepath, name)
 
     def rename(self, oldpath, newpath):
-        nzbfs_oldpath, file_size = get_nzbfs_filepath(self.db_root, oldpath)
+        nzbfs_oldpath, file_size = get_nzbfs_filepath(self.db_root + oldpath)
         if file_size:
             os.rename(nzbfs_oldpath, '%s%s-%d.nzbfs' %
                       (self.db_root, newpath, file_size))
@@ -235,7 +235,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             subprocess.check_call([self.process_nzb_script,
                                    self.db_root + newpath])
             subprocess.Popen([self.post_process_script,
-                              path.replace('.nzb', '')])
+                              newpath.replace('.nzb', '')])
 
     def rmdir(self, path):
         return os.rmdir(self.db_root + path)
