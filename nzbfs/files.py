@@ -17,13 +17,11 @@ log = logging.getLogger(__name__)
 
 class File(object):
     def save(self, path):
-        realpath = '%s-%s.nzbfs' % (path, str(self.file_size))
-        with open(realpath, 'wb') as fh:
+        with open(path, 'wb') as fh:
             serialized_data = self.dump().SerializeToString()
             compressed_data = zlib.compress(serialized_data)
             fh.write(compressed_data)
-        os.utime(realpath, (-1, self.mtime))
-        return realpath
+        os.utime(path, (-1, self.mtime))
 
 
 class Handle(object):
@@ -202,9 +200,8 @@ class YencFsFile(File):
     def save(self, path):
         with self._lock:
             if self.dirty:
-                realpath = super(YencFsFile, self).save(path)
+                super(YencFsFile, self).save(path)
                 self.dirty = False
-                return realpath
 
     def open(self, mode, downloader):
         return YencFsHandle(self, downloader)
@@ -364,9 +361,8 @@ class RarFsFile(File):
     def save(self, path):
         with self._lock:
             if self.dirty or any(file.dirty for file in self.sub_files):
-                realpath = super(RarFsFile, self).save(path)
+                super(RarFsFile, self).save(path)
                 self.dirty = False
-                return realpath
 
     def open(self, mode, downloader):
         return RarFsHandle(self, downloader)

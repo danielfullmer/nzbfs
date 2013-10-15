@@ -202,12 +202,14 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         file = self._loaded_files.get(path)
         if file:
             if path.endswith('.tmp-autorename'):
-                file.save(self.db_root + file.filename)
-                os.unlink(file.orig_nzbfs_filepath)
+                # TODO check this logic
+                desired_filepath = self.db_root + file.filename
             else:
-                savedpath = file.save(self.db_root + path)
-                if savedpath != file.orig_nzbfs_filepath:
-                    os.unlink(file.orig_nzbfs_filepath)
+                desired_filepath = self.db_root + path
+
+            newpath = '%s-%s.nzbfs' % (desired_filepath, str(file.file_size))
+            file.save(file.orig_nzbfs_filepath)
+            os.rename(file.orig_nzbfs_filepath, newpath)
 
         del self._open_handles[fh]
 

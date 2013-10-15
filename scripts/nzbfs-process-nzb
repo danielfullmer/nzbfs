@@ -104,7 +104,9 @@ def process_nzb(path):
         log.info('New file: %s', filename)
 
         filename = file.filename.replace('/', '-')
-        file.save(os.path.join(basepath, filename))
+        desired_filepath = os.path.join(basepath, filename)
+        newpath = '%s-%s.nzbfs' % (desired_filepath, str(file.file_size))
+        file.save(newpath)
 
     return basepath
 
