@@ -6,10 +6,11 @@ import os
 from nzbfs import rarfile
 from nzbfs.files import load_nzbfs_file, RarFsFile
 
+log = logging.getLogger(__name__)
+
 RAR_MAX_FILES = 1  # Maximum number of files to extract from each rar
 
-RAR_RE = re.compile(r'\.(?P<ext>part\d*\.rar|rar|s\d\d|r\d\d|\d\d\d)$', re.I)
-RAR_RE_V3 = re.compile(r'\.(?P<ext>part\d*)$', re.I)
+RAR_RE = re.compile(r'\.(?P<ext>part\d*\.rar|rar|s\d\d|r\d\d|\d{1,3})$', re.I)
 
 
 # Sort the various RAR filename formats properly :\
@@ -30,8 +31,6 @@ def rar_sort(a, b):
 
 
 def extract_rar(dirpath, rar_filenames):
-    log = logging.getLogger('extract_rar')
-
     rar_filenames.sort(rar_sort)
     first_rar_filename = rar_filenames[0]
 
@@ -58,7 +57,7 @@ def extract_rar(dirpath, rar_filenames):
                 if info_record['default_file_offset'] == 0:
                     info_record['default_file_offset'] = item.file_offset
 
-                log.info(item.filename)
+                log.info('Found file:', item.filename)
                 info_record['files_seen'] += 0
                 if info_record['files_seen'] >= RAR_MAX_FILES:
                     log.info('Done parsing')
@@ -98,7 +97,7 @@ def extract_rars_in_dir(dirpath):
     rar_sets = {}
     for rar in rars:
         rar_set = os.path.splitext(os.path.basename(rar))[0]
-        if RAR_RE_V3.search(rar_set):
+        if RAR_RE.search(rar_set):
             rar_set = os.path.splitext(rar_set)[0]
         if not rar_set in rar_sets:
             rar_sets[rar_set] = []
