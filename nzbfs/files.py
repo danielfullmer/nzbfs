@@ -1,5 +1,5 @@
 import errno
-import gzip
+import zlib
 import itertools
 import logging
 import os
@@ -13,6 +13,16 @@ from nzbfs.linehandlers import YencLineHandler
 NZBFS_FILENAME_RE = re.compile(r'(.*)-(\d+)\.nzbfs$')
 MAX_READAHEAD = 2 * 1024 * 1024
 log = logging.getLogger(__name__)
+
+
+class File(object):
+    def save(self, path):
+        realpath = '%s-%s.nzbfs' % (path, str(self.file_size))
+        with open(realpath, 'wb') as fh:
+            serialized_data = self.dump().SerializeToString()
+            compressed_data = zlib.compress(serialized_data)
+            fh.write(compressed_data)
+        os.utime(realpath, (-1, self.mtime))
 
 
 class Handle(object):
@@ -48,7 +58,7 @@ class Handle(object):
         return 0
 
 
-class RegularFile(object):
+class RegularFile(File):
     @staticmethod
     def _mode2flags(mode):
         #if mode == 'a':
@@ -102,7 +112,7 @@ class RegularFileHandle(Handle):
         return True
 
 
-class YencFsFile(object):
+class YencFsFile(File):
     def __init__(self, subject=None, poster=None, date_time=0, groups=[],
                  parts=[]):
         self.subject = subject
@@ -191,13 +201,8 @@ class YencFsFile(object):
     def save(self, path):
         with self._lock:
             if self.dirty:
-                realpath = '%s-%s.nzbfs' % (
-                    path, str(self.file_size))
-                with gzip.open(realpath, 'w') as fh:
-                    fh.write(self.dump().SerializeToString())
-                os.utime(realpath, (-1, self.mtime))
+                realpath = super(YencFsFile, self).save(path)
                 self.dirty = False
-
                 return realpath
 
     def open(self, mode, downloader):
@@ -303,7 +308,7 @@ class YencFsHandle(Handle):
         return task.complete
 
 
-class RarFsFile(object):
+class RarFsFile(File):
     def __init__(self, filename='', file_size=0, mtime=0, first_file_offset=0,
                  default_file_offset=0, first_add_size=0, default_add_size=0,
                  first_volume_num=0, sub_files=None):
@@ -358,13 +363,8 @@ class RarFsFile(object):
     def save(self, path):
         with self._lock:
             if self.dirty or any(file.dirty for file in self.sub_files):
-                realpath = '%s-%s.nzbfs' % (
-                    path, str(self.file_size))
-                with gzip.open(realpath, 'w') as fh:
-                    fh.write(self.dump().SerializeToString())
-                os.utime(realpath, (-1, self.mtime))
+                realpath = super(RarFsFile, self).save(path)
                 self.dirty = False
-
                 return realpath
 
     def open(self, mode, downloader):
@@ -461,8 +461,10 @@ def get_nzbfs_filepath(path):
 
 
 def load_nzbfs_file(path):
-    with gzip.open(path, 'r') as fh:
-        pb = nzbfs_pb2.File.FromString(fh.read())
+    with open(path, 'rb') as fh:
+        compressed_data = fh.read()
+        data = zlib.decompress(compressed_data)
+        pb = nzbfs_pb2.File.FromString(data)
 
     if pb.type == nzbfs_pb2.File.YENC:
         f = YencFsFile()
