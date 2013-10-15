@@ -18,9 +18,10 @@ Post Processing
 After an NZB has been added to NzbFS, a user-provided post-processing script is called with the path of the newly created NZB directory.
 This can be used to automatically organize files using other programs.
 Also, by default, RARs are not "extracted" from the NZB until NzbFS is instructed to do so.
-This could happen automatically from the post-processing script by doing something like:
 
-    $ setfattr -n user.nzbfs.cmd -v extract "<mountpoint>/$1"
+    $ nzbfs-extract-rars "<mountpoint>/$1"
+
+You could set this up to happen automatically from the post-processing script.
 
 How It Works
 ------------
