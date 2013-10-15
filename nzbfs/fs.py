@@ -99,7 +99,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
                     return self._loaded_files[path]
                 else:
                     nzbfs_file = load_nzbfs_file(nzbfs_filepath)
-                    nzbfs_file.orig_path = path
+                    nzbfs_file.orig_nzbfs_filepath = nzbfs_filepath
                     self._loaded_files[path] = nzbfs_file
                     return nzbfs_file
         else:
@@ -203,11 +203,11 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         if file:
             if path.endswith('.tmp-autorename'):
                 file.save(self.db_root + file.filename)
-                os.unlink(file.orig_path)
+                os.unlink(file.orig_nzbfs_filepath)
             else:
                 savedpath = file.save(self.db_root + path)
-                if savedpath != file.orig_path:
-                    os.unlink(file.orig_path)
+                if savedpath != file.orig_nzbfs_filepath:
+                    os.unlink(file.orig_nzbfs_filepath)
 
         del self._open_handles[fh]
 

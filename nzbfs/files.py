@@ -23,6 +23,7 @@ class File(object):
             compressed_data = zlib.compress(serialized_data)
             fh.write(compressed_data)
         os.utime(realpath, (-1, self.mtime))
+        return realpath
 
 
 class Handle(object):
