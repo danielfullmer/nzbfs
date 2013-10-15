@@ -331,6 +331,7 @@ class RarFsFile(object):
         self.default_file_offset = pb.default_file_offset
         self.first_add_size = pb.first_add_size
         self.default_add_size = pb.default_add_size
+        self.dirty = False
 
         self.sub_files = []
         for f in pb.sub_files:
@@ -471,7 +472,6 @@ def load_nzbfs_file(path):
         raise Exception('Unknown nzbfs file type.')
 
     f.load(pb)
-    f.dirty = False
 
     return f
 
