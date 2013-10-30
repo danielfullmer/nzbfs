@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 RAR_MAX_FILES = 1  # Maximum number of files to extract from each rar
 
-RAR_RE = re.compile(r'\.(?P<ext>part\d*\.rar|rar|s\d\d|r\d\d|\d{1,3})$', re.I)
+RAR_RE = re.compile(r'^(.*?)\.(part\d*\.rar|rar|s\d\d|r\d\d|\d{1,3})$', re.I)
 
 
 # Sort the various RAR filename formats properly :\
@@ -88,24 +88,21 @@ def extract_rar(dirpath, rar_filenames):
         rf.save('%s/%s' % (dirpath, ri.filename))
 
     # TODO: Make this configurable
-    for rar_filename in rar_filenames:
-        os.unlink('%s/%s' % (dirpath, rar_filename))
+    #for rar_filename in rar_filenames:
+    #    os.unlink('%s/%s' % (dirpath, rar_filename))
+
 
 def extract_rars_in_dir(dirpath):
-    rars = [
-        filename
-        for filename in os.listdir(dirpath)
-        if RAR_RE.search(filename)
-    ]
-
     rar_sets = {}
-    for rar in rars:
-        rar_set = os.path.splitext(os.path.basename(rar))[0]
-        if RAR_RE.search(rar_set):
-            rar_set = os.path.splitext(rar_set)[0]
-        if not rar_set in rar_sets:
-            rar_sets[rar_set] = []
-        rar_sets[rar_set].append(rar)
+    for filename in os.listdir(dirpath):
+        match = RAR_RE.match(filename)
+        if match:
+            rar_set_name = match.group(1)
 
+            if not rar_set_name in rar_sets:
+                rar_sets[rar_set_name] = []
+            rar_sets[rar_set_name].append(filename)
+
+    print rar_sets
     for rar_filenames in rar_sets.itervalues():
         extract_rar(dirpath, rar_filenames)
