@@ -63,8 +63,12 @@ def extract_rar(dirpath, rar_filenames):
                     log.info('Done parsing')
                     return True  # Stop parsing
 
+    def opener(filename, *args, **kwargs):
+        return open(os.path.join(dirpath, filename), *args, **kwargs)
+
     tmp_rf = rarfile.RarFile(first_rar_filename,
-                             info_callback=info_callback)
+                             info_callback=info_callback,
+                             opener=opener)
     for ri in tmp_rf.infolist():
         date_time = calendar.timegm(ri.date_time)
 
