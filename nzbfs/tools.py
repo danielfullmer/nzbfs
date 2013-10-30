@@ -85,7 +85,7 @@ def extract_rar(dirpath, rar_filenames):
         else:
             raise Exception('Extract from compressed rar file %s' %
                             first_rar_filename)
-        rf.save('s/%s' % (dirpath, ri.filename))
+        rf.save('%s/%s' % (dirpath, ri.filename))
 
     # TODO: Make this configurable
     for rar_filename in rar_filenames:
