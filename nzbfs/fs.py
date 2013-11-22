@@ -207,6 +207,9 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             else:
                 desired_filepath = self.db_root + path
 
+            if file.broken:
+                desired_filepath += '-broken'
+
             newpath = '%s-%s.nzbfs' % (desired_filepath, str(file.file_size))
             file.save(file.orig_nzbfs_filepath)
             os.rename(file.orig_nzbfs_filepath, newpath)

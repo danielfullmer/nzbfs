@@ -124,6 +124,7 @@ class YencFsFile(File):
         self.seen = False
 
         self.dirty = True
+        self.broken = False
         self._lock = threading.RLock()
         self._last_read_offset = 0  # Where the last read left off.
         self._readahead = 1
@@ -276,6 +277,8 @@ class YencFsHandle(Handle):
                 part_finished, part_size, part_error = update_queue.get()
                 if part_error:
                     log.error(part_error)
+                    if part_error.startswith('430 '):  # Article missing
+                        self._file.broken = True
                     raise fuse.FuseOSError(errno.EIO)
                 elif part_finished:
                     break
@@ -325,6 +328,10 @@ class RarFsFile(File):
 
         self.dirty = True
         self._lock = threading.RLock()
+
+    @property
+    def broken(self):
+        return any(file.broken for file in self.sub_files)
 
     def load(self, pb):
         self.filename = pb.filename
