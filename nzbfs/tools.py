@@ -85,7 +85,9 @@ def extract_rar(dirpath, rar_filenames):
         else:
             raise Exception('Extract from compressed rar file %s' %
                             first_rar_filename)
-        rf.save('%s/%s' % (dirpath, ri.filename))
+
+        # TODO: Move this logic to one place, it's currently also in release()
+        rf.save('%s/%s-%s.nzbfs' % (dirpath, ri.filename, str(rf.file_size)))
 
     # TODO: Make this configurable
     #for rar_filename in rar_filenames:
