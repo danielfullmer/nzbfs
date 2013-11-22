@@ -1,9 +1,11 @@
 #!/usr/bin/python2
 
 import sys
+import logging
 
 from nzbfs.tools import extract_rars_in_dir
 
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     extract_rars_in_dir(sys.argv[1])

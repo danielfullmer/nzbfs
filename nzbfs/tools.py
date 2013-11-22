@@ -57,7 +57,7 @@ def extract_rar(dirpath, rar_filenames):
                 if info_record['default_file_offset'] == 0:
                     info_record['default_file_offset'] = item.file_offset
 
-                log.info('Found file:', item.filename)
+                log.info('Found file: %s', item.filename)
                 info_record['files_seen'] += 0
                 if info_record['files_seen'] >= RAR_MAX_FILES:
                     log.info('Done parsing')
