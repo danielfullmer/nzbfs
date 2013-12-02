@@ -9,8 +9,8 @@ import threading
 from nzbfs import fuse
 from nzbfs import nzbfs_pb2
 from nzbfs.linehandlers import YencLineHandler
+from nzbfs.utils import set_nzbfs_attr
 
-NZBFS_FILENAME_RE = re.compile(r'^(.*)-(\d+)\.nzbfs$')
 MAX_READAHEAD = 2 * 1024 * 1024
 log = logging.getLogger(__name__)
 
@@ -21,6 +21,8 @@ class File(object):
             serialized_data = self.dump().SerializeToString()
             compressed_data = zlib.compress(serialized_data)
             fh.write(compressed_data)
+            set_nzbfs_attr(path, 'size', self.file_size)
+            set_nzbfs_attr(path, 'mtime', self.mtime)
         os.utime(path, (-1, self.mtime))
 
 
@@ -442,25 +444,6 @@ class RarFsHandle(Handle):
             if not task.complete:
                 return False
         return True
-
-
-def get_nzbfs_filepath(path):
-    dirname = os.path.dirname(path)
-    basename = os.path.basename(path)
-
-    # Check to see if this is currently a .nzbfs file
-    match = NZBFS_FILENAME_RE.search(basename)
-    if match:
-        return path, 0
-
-    # Otherwise, search for an nzbfs file that matches this path
-    for filename in os.listdir(dirname):
-        match = NZBFS_FILENAME_RE.search(filename)
-        if match and match.group(1) == basename:
-            return os.path.join(dirname, filename), int(match.group(2))
-
-    # If not found, just use the original file
-    return path, 0
 
 
 def load_nzbfs_file(path):

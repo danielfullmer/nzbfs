@@ -40,7 +40,7 @@ def extract_rar(dirpath, rar_filenames):
     for rar_filename in rar_filenames:
         file_size = os.stat('%s/%s' % (dirpath, rar_filename)).st_size
         files_dict[rar_filename] = load_nzbfs_file(
-            '%s/%s-%d.nzbfs' % (dirpath, rar_filename, file_size))
+            '%s/%s-raw' % (dirpath, rar_filename))
 
     info_record = {
         'default_file_offset': 0,
@@ -87,7 +87,7 @@ def extract_rar(dirpath, rar_filenames):
                             first_rar_filename)
 
         # TODO: Move this logic to one place, it's currently also in release()
-        rf.save('%s/%s-%s.nzbfs' % (dirpath, ri.filename, str(rf.file_size)))
+        rf.save('%s/%s' % (dirpath, ri.filename))
 
     # TODO: Make this configurable
     #for rar_filename in rar_filenames:

@@ -3,6 +3,8 @@ import logging
 import threading
 import os
 
+import xattr
+
 
 class MemCache(object):
     def __init__(self, cache_limit):
@@ -94,3 +96,20 @@ class CacheChain(object):
         return None
 
 
+def is_nzbfs_file(path):
+    if os.path.isfile(path):
+        return 'user.nzbfs.size' in xattr.listxattr(path)
+    else:
+        return False
+
+
+def get_nzbfs_attr(path, attr):
+    try:
+        ret = xattr.getxattr(path, 'user.nzbfs.' + attr)
+        return int(ret)
+    except IOError:
+        return None
+
+
+def set_nzbfs_attr(path, attr, value):
+    xattr.setxattr(path, 'user.nzbfs.' + attr, str(value))
