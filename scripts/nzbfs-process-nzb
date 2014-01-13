@@ -115,35 +115,12 @@ def process_nzb(path):
 
 
 def main():
-    parser = optparse.OptionParser(
-        usage='%prog [options] <db root> <mount point>',
-        version='%prog ' + __version__)
-    parser.add_option("-c", '--config', default='.nzbfs.cfg',
-                      help='use config file')
-    parser.add_option('-d', '--debug', action='store_true',
-                      help='enable debug mode')
-    options, args = parser.parse_args()
-
-    if options.debug:
-        logging.basicConfig(level=logging.DEBUG)
     if len(sys.argv) < 2:
         raise Exception('Need an nzb file to process')
-
-    config = ConfigParser.SafeConfigParser({
-        'process_nzb_script': 'nzbfs-process-nzb',
-        'threads': '4',
-        'port':  '119',
-        'ssl': 'false'
-    })
-    config.read(options.config)
 
     # TODO: Set total_files and total_size correctly.
     basepath = process_nzb(sys.argv[1])
     os.unlink(sys.argv[1])
-
-    if config.has_option('nzbfs', 'post_process_script'):
-        post_process_script = config.get('nzbfs', 'post_process_script')
-        subprocess.Popen([post_process_script, basepath])
 
 
 if __name__ == '__main__':
