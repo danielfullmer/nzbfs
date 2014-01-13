@@ -198,11 +198,17 @@ class DownloaderThread(threading.Thread):
 
             try:
                 self.cur_task.execute(self)
-            except (socket.error, ssl.SSLError, nntplib.NNTPTemporaryError,
-                    nntplib.NNTPPermanentError), e:
+            except (socket.error, ssl.SSLError), e:
                 log.error(e)
                 log.info("Reconnecting")
                 self.connect()
+            except nntplib.NNTPTemporaryError, e:
+                log.error(e)
+                if e.message.startswith('400'):
+                    # RFC3977 says we SHOULD reconnect with an exponentially
+                    # increasing delay
+                    log.info("Reconnecting")
+                    self.connect()
             except Exception, e:
                 log.error(e)
             else:
@@ -239,6 +245,13 @@ class BodyTask(object):
         try:
             thread.send_body(self.line_handler.part.message_id)
         except nntplib.NNTPTemporaryError, e:
+            # Don't catch 400 errors here, let it fall through to
+            # DownloaderThread.run()
+            if e.message.startswith('400'):
+                raise
+
+            # Otherwise, notify any listening threads that there is a problem
+            # with this article.
             self.notify(True, e.message)
             return
         while True:
