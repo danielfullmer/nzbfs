@@ -21,7 +21,7 @@ def main():
     if len(args) < 1:
         parser.error('Need a mount point')
 
-    nzbfs = NzbFs(options.config)
+    nzbfs = NzbFs(options.config, args[0])
 
     fuse.FUSE(
         nzbfs, args[0],

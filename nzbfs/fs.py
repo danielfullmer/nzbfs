@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 class NzbFs(fuse.Operations, fuse.LoggingMixIn):
-    def __init__(self, config_file, *args, **kwargs):
+    def __init__(self, config_file, mount_root, *args, **kwargs):
         super(NzbFs, self).__init__(*args, **kwargs)
 
         self.config_file = config_file
@@ -30,6 +30,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         })
         config.read(config_file)
 
+        self.mount_root = mount_root
         self.db_root = config.get('nzbfs', 'db_root')
         self.post_process_script = config.get('nzbfs', 'post_process_script')
 
