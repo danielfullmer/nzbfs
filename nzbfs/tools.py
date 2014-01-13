@@ -86,8 +86,10 @@ def extract_rar(dirpath, rar_filenames):
             raise Exception('Extract from compressed rar file %s' %
                             first_rar_filename)
 
-        # TODO: Move this logic to one place, it's currently also in release()
-        rf.save('%s/%s' % (dirpath, ri.filename))
+        rf_path = '%s/%s' % (dirpath, ri.filename)
+        if os.path.exists(rf_path):
+            os.remove(rf_path)
+        rf.save(rf_path)
 
     # TODO: Make this configurable
     #for rar_filename in rar_filenames:
