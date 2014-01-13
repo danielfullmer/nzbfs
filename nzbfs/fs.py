@@ -23,7 +23,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
         self.config_file = config_file
         config = ConfigParser.SafeConfigParser({
-            'post_process_script': 'nzbfs-process-nzb',
+            'process_nzb_script': 'nzbfs-process-nzb',
             'threads': '4',
             'port':  '119',
             'ssl': 'false'
@@ -32,6 +32,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
 
         self.mount_root = mount_root
         self.db_root = config.get('nzbfs', 'db_root')
+        self.process_nzb_script = config.get('nzbfs', 'process_nzb_script')
         self.post_process_script = config.get('nzbfs', 'post_process_script')
 
         self._downloaders = {}
