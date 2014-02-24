@@ -87,12 +87,12 @@ def process_nzb(path):
     for file in files:
         filename = matcher.match(file.subject)
 
-        # Skip self-named nzb file
-        if filename.endswith('.nzb') or filename.endswith('.NZB'):
-            continue
-
         if filename:
             file.filename = filename
+
+            # Skip self-named nzb file
+            if filename.endswith('.nzb') or filename.endswith('.NZB'):
+                continue
         else:
             try:
                 tmpfile = os.path.join(basepath, '.tmp-autorename')
