@@ -73,9 +73,11 @@ def extract_rar(dirpath, rar_filenames):
         date_time = calendar.timegm(ri.date_time)
 
         if ri.compress_type == 0x30:
+            # Using keys from rar_filenames ensures this will be sorted
+            # correctly.
             sub_files = [
                 files_dict[filename]
-                for filename in sorted(files_dict.keys())
+                for filename in rar_filenames
             ]
 
             rf = RarFsFile(ri.filename, ri.file_size, date_time,
