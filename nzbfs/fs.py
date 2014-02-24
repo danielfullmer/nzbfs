@@ -207,10 +207,11 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
         del self._open_handles[fh]
 
         if path.endswith('.nzb') or path.endswith('.nzb.gz'):
+            # TODO: mount_root here as well?
             subprocess.check_call([self.process_nzb_script,
                                    self.db_root + path])
             subprocess.Popen([self.post_process_script,
-                              path.replace('.nzb', '')])
+                              self.mount_root + path.replace('.nzb', '')])
 
         return ret
 
@@ -223,7 +224,7 @@ class NzbFs(fuse.Operations, fuse.LoggingMixIn):
             subprocess.check_call([self.process_nzb_script,
                                    self.db_root + newpath])
             subprocess.Popen([self.post_process_script,
-                              newpath.replace('.nzb', '')])
+                              self.mount_root + newpath.replace('.nzb', '')])
 
     def rmdir(self, path):
         return os.rmdir(self.db_root + path)
