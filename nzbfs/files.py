@@ -297,6 +297,11 @@ class YencFsHandle(Handle):
                 offset += len(newdata)
                 size_remaining -= len(newdata)
                 data += newdata
+
+                # Were weren't given the yenc data we were promised!
+                if len(newdata) == 0:
+                    self._file.broken = True
+                    break
             else:
                 log.info(
                     'Missed part. Offset: %d part: %s' % (offset, part))
