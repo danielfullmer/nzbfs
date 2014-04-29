@@ -102,9 +102,10 @@ def process_nzb(path):
             except Exception, e:
                 log.exception(e)
 
-            # TODO: This currently doesn't work, we only know real filename if
-            # we re-open the file :(
-            matcher.should_match(file.subject, file.filename)
+            # TODO: This currently doesn't work, we only know the real filename
+            # if we re-open the file :(
+            if file.subject and file.filename:
+                matcher.should_match(file.subject, file.filename)
 
         log.info('New file: %s', filename)
 
