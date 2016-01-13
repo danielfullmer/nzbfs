@@ -1,6 +1,12 @@
 NzbFS
 =====
 
+Notice:
+I haven't used this code for a while now.
+The big downside to using a usenet-based filesystem is that there is not much you can do if an article is missing.
+This was the reason I stopped using it.
+Hopefully this is useful to someone in the future.
+
 Overview
 --------
 NzbFS is a read-only userspace network filesystem that reads yenc-encoded files from usenet directly.
@@ -45,8 +51,8 @@ This helps applications feel more responsive.
 Misc
 ----
 
+In case you feel a need for even more layers of indirection, you can do things like:
+
     $ cp ~/Downloads/ubuntu.nzb ~/nzb-mnt/
     $ sudo mount -o loop ~/nzb-mnt/ubuntu/ubuntu-12.10-desktop-amd64.iso /mnt
     $ ls /mnt
-
-Yep, that just happened.
